@@ -60,9 +60,9 @@
     .compact-view-btn.is-active { color: #fff; background: linear-gradient(125deg, var(--blue), var(--violet)); box-shadow: 0 6px 13px rgba(86,111,190,.28); }
     .schedule.compact { grid-template-columns: 52px repeat(7, minmax(54px, 1fr)); min-width: 0; gap: 3px; }
     .schedule.compact .course { position: relative; display: grid; grid-template-rows: 1fr 1fr; margin: 1px; padding: 6px 5px; border-radius: 10px; }
-    .schedule.compact .course-name, .schedule.compact .course-place { overflow: hidden; overflow-wrap: normal; word-break: normal; }
-    .schedule.compact .course-name { display: -webkit-box; grid-row: 1; align-self: start; width: 100%; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: .72rem; line-height: 1.28; }
-    .schedule.compact .course-place { grid-row: 2; align-self: start; width: 100%; margin: 0; white-space: nowrap; text-overflow: ellipsis; font-size: .62rem; line-height: 1.25; }
+    .schedule.compact .course-name, .schedule.compact .course-place { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; -webkit-box-orient: vertical; }
+    .schedule.compact .course-name { grid-row: 1; align-self: start; width: 100%; -webkit-line-clamp: 4; font-size: .62rem; line-height: 1.22; }
+    .schedule.compact .course-place { grid-row: 2; align-self: start; width: 100%; margin: 0; -webkit-line-clamp: 4; font-size: .55rem; line-height: 1.22; }
     .schedule.compact .course button { position: absolute; top: 2px; right: 2px; z-index: 1; }
     .schedule.compact .course-time, .schedule.compact .course-week, .schedule.compact .course-status, .schedule.compact .course-conflict-status { display: none; }
     .schedule.compact .day-head { font-size: .72rem; }
