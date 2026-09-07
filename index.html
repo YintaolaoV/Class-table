@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eef4ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="课表">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>静态课表</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .course-name { font-size: 1.05rem; line-height: 1.28; }
+    .course-place, .course-week { font-size: .78rem; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .course-week { margin-top: 2px; opacity: .92; }
+    .course.inactive { opacity: 1; filter: saturate(.38); background: linear-gradient(145deg, rgba(97,113,150,.5), rgba(110,100,139,.5)); box-shadow: none; }
+    .course-status { display: inline-block; margin-top: 5px; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.72); color: #d9364b; font-size: .74rem; font-weight: 800; line-height: 1.2; }
+    .course-conflict-status { display: inline-block; margin: 5px 0 0 4px; padding: 2px 6px; border-radius: 6px; background: rgba(255, 235, 238, .94); color: #c72f46; font-size: .74rem; font-weight: 800; line-height: 1.2; }
+    .backup-zone { margin-top: 20px; padding: 13px; border-radius: 15px; background: rgba(57, 123, 255, .08); font-size: .8rem; }
+    .backup-zone p { margin: 0 0 9px; color: var(--blue); font-weight: 650; }
+    .backup-zone div { display: flex; gap: 8px; flex-wrap: wrap; }
+    .backup-zone small { display: block; margin-top: 9px; color: var(--muted); line-height: 1.4; }
+    .modal { max-height: calc(100vh - 24px); overflow: auto; }
+    .table-actions { display: flex; align-items: center; gap: 4px; }
+    .week-only-btn { margin-left: auto; padding: 8px 12px; border-radius: 13px; color: var(--muted); background: rgba(255,255,255,.5); border: 1px solid var(--line); font-size: .84rem; font-weight: 700; }
+    .week-only-btn::before { content: '○'; margin-right: 5px; font-size: 1rem; vertical-align: -1px; }
+    .week-only-btn.is-active { color: #fff; background: linear-gradient(125deg, var(--blue), var(--violet)); box-shadow: 0 6px 13px rgba(86,111,190,.28); }
+    .week-only-btn.is-active::before { content: '✓'; }
+    .week-nav { display: flex; gap: 4px; }
+    .week-nav-btn { padding: 8px 10px; border-radius: 11px; color: var(--muted); background: transparent; font-size: .8rem; font-weight: 700; }
+    .week-nav-btn:hover { background: rgba(255,255,255,.55); color: var(--blue); }
+    .current-week-btn { color: var(--blue); background: rgba(57,123,255,.1); }
+    .schedule-edit-hint { margin: 4px 0 0; color: var(--muted); font-size: .72rem; }
+    .course-time { margin-top: 4px; color: rgba(255,255,255,.94); font-size: .7rem; line-height: 1.25; }
+    .course-time.adjusted { color: #ffe4a8; font-weight: 750; }
+    .course-time small { display: block; margin-top: 2px; font-size: .66rem; font-weight: 650; }
+    .setting-check { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 12px; background: rgba(57,123,255,.08); color: var(--ink); }
+    .setting-check input { width: auto; margin: 0; accent-color: var(--blue); }
+    .reminder-dialog { padding: 22px; }
+    .reminder-dialog h2 { font-size: 1.25rem; }
+    .reminder-message { margin: 8px 0 16px; color: var(--muted); line-height: 1.55; }
+    .reminder-time { margin: 12px 0; padding: 12px; border-radius: 14px; color: var(--ink); background: rgba(57,123,255,.1); }
+    .reminder-time strong { display: block; color: var(--blue); font-size: 1.1rem; }
+    .reminder-time small { display: block; margin-top: 3px; color: var(--muted); }
+    .reminder-course { padding: 14px; border-radius: 16px; color: white; background: linear-gradient(135deg, var(--blue), var(--violet)); box-shadow: 0 8px 18px rgba(70,93,168,.2); }
+    .reminder-course h3 { margin: 0; font-size: 1.08rem; }
+    .reminder-course p { margin: 6px 0 0; font-size: .84rem; opacity: .92; }
+    .reminder-nav-btn { margin-top: 12px; padding: 8px 12px; border-radius: 11px; color: #1b55c8; background: rgba(255,255,255,.94); font-size: .82rem; font-weight: 800; }
+    .next-course-card { margin: 18px 0; padding: 18px; border-radius: 28px; }
+    .next-course-heading { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+    .next-course-heading h2 { margin: 0; font-size: 1.2rem; letter-spacing: -.04em; }
+    .next-course-heading .muted { text-align: right; font-size: .78rem; }
+    .next-course-content { margin-top: 12px; }
+    .next-course-content .reminder-course { min-height: 0; }
+    .next-course-empty { margin: 0; padding: 12px 0 2px; color: var(--muted); font-size: .88rem; }
+    .compact-view-btn { padding: 8px 12px; border-radius: 13px; color: var(--muted); background: rgba(255,255,255,.5); border: 1px solid var(--line); font-size: .84rem; font-weight: 700; }
+    .compact-view-btn.is-active { color: #fff; background: linear-gradient(125deg, var(--blue), var(--violet)); box-shadow: 0 6px 13px rgba(86,111,190,.28); }
+    .schedule.compact { grid-template-columns: 52px repeat(7, minmax(54px, 1fr)); min-width: 0; gap: 3px; }
+    .schedule.compact .course { position: relative; display: grid; grid-template-rows: 1fr 1fr; margin: 1px; padding: 6px 5px; border-radius: 10px; }
+    .schedule.compact .course-name, .schedule.compact .course-place { overflow: hidden; overflow-wrap: normal; word-break: normal; }
+    .schedule.compact .course-name { display: -webkit-box; grid-row: 1; align-self: start; width: 100%; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: .72rem; line-height: 1.28; }
+    .schedule.compact .course-place { grid-row: 2; align-self: start; width: 100%; margin: 0; white-space: nowrap; text-overflow: ellipsis; font-size: .62rem; line-height: 1.25; }
+    .schedule.compact .course button { position: absolute; top: 2px; right: 2px; z-index: 1; }
+    .schedule.compact .course-time, .schedule.compact .course-week, .schedule.compact .course-status, .schedule.compact .course-conflict-status { display: none; }
+    .schedule.compact .day-head { font-size: .72rem; }
+    .schedule.compact .day-head small { display: none; }
+    .conflict-btn { color: #cf3048; background: rgba(255, 237, 240, .74); border: 1px solid rgba(207, 48, 72, .25); border-radius: 13px; padding: 8px 11px; font-weight: 750; font-size: .8rem; }
+    .conflict-btn:hover { filter: brightness(.96); }
+    .conflict-dialog-content { padding: 22px; }
+    .red-eyebrow { color: #cf3048; }
+    .conflict-cards { display: grid; gap: 10px; margin-top: 14px; }
+    .conflict-card { padding: 13px; border-radius: 15px; background: rgba(255, 243, 245, .72); border: 1px solid rgba(207, 48, 72, .2); }
+    .conflict-card h3 { margin: 0; font-size: 1rem; }
+    .conflict-card p { margin: 5px 0 0; color: var(--muted); font-size: .82rem; }
+    @media (max-width:650px) { .table-toolbar { flex-wrap: wrap; gap: 6px; } .week-only-btn { margin-left: 0; } .week-nav { order: 3; width: 100%; } .table-actions { margin-left: auto; } .conflict-btn { padding: 7px 8px; } .conflict-dialog-content { padding: 18px; } .next-course-card { margin: 12px 0; padding: 14px; border-radius: 22px; } .next-course-heading { align-items: start; } .next-course-heading .muted { max-width: 45%; } .schedule.compact { grid-template-columns: 42px repeat(7, minmax(0, 1fr)); min-width: 0; } .schedule.compact .time-label { font-size: .61rem; line-height: 1.2; } }
+    @media (max-width:650px) {
+      .topbar { flex-wrap: wrap; }
+      .brand { width: 100%; }
+      .header-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+      .header-actions .secondary-btn { display: inline-flex; }
+      .header-actions .primary-btn, .header-actions .secondary-btn { padding: 9px 11px; font-size: .88rem; }
+      .course-name, .course-place { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: break-word; }
+      .course-name { font-size: .95rem; line-height: 1.2; }
+      .course-place { font-size: .72rem; line-height: 1.25; margin-top: 3px; }
+      .course-week { white-space: normal; font-size: .7rem; }
+      .schedule { grid-template-columns: 64px repeat(7, minmax(102px, 1fr)); min-width: 778px; }
+      .course { padding: 7px; }
+    }
+    @media (pointer: coarse) { .course button { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="aurora a"></div><div class="aurora b"></div><div class="grain"></div>
+  <main class="app-shell">
+    <header class="topbar glass">
+      <div class="brand"><span class="brand-mark">✦</span><div><h1 id="scheduleTitle">静态课表</h1><p id="todayText">正在读取日期…</p></div></div>
+      <div class="header-actions">
+        <button class="icon-btn" id="themeBtn" aria-label="切换外观">◐</button>
+        <button class="secondary-btn" id="settingsBtn">课表设置</button>
+        <button class="primary-btn" id="addBtn">＋ 添加课程</button>
+      </div>
+    </header>
+
+    <section class="hero glass">
+      <div><p class="eyebrow">本学期进度</p><h2 id="weekStatus">加载中</h2><p id="termHint" class="muted"></p></div>
+      <div class="week-orb"><span id="weekNumber">—</span><small>教学周</small></div>
+    </section>
+
+    <section class="next-course-card glass" aria-live="polite">
+      <div class="next-course-heading"><div><p class="eyebrow">行程安排</p><h2>下一节课</h2></div><p id="nextCourseStatus" class="muted"></p></div>
+      <div id="nextCourseContent" class="next-course-content"></div>
+    </section>
+
+    <section class="timetable-card glass">
+      <div class="table-toolbar"><div><h2>本周课程</h2><p id="scheduleHint" class="muted">课程会随单双周自动显示</p><p class="schedule-edit-hint">提示：长按课程卡片 0.5 秒可编辑</p></div><button id="compactViewBtn" class="compact-view-btn" type="button" aria-pressed="false">紧凑视图</button><button id="weekOnlyBtn" class="week-only-btn" type="button" aria-pressed="false">只显示本周课程</button><div class="week-nav" aria-label="教学周切换"><button id="prevWeekBtn" class="week-nav-btn" type="button">上一周</button><button id="nextWeekBtn" class="week-nav-btn" type="button">下一周</button><button id="currentWeekBtn" class="week-nav-btn current-week-btn" type="button" hidden>回到本周</button></div><div class="table-actions"><button id="conflictBtn" class="conflict-btn" hidden>★ 课程冲突</button><button id="todayBtn" class="text-btn">定位今天</button></div></div>
+      <div class="schedule-scroll"><div id="schedule" class="schedule" aria-label="周课表"></div></div>
+      <p class="legend"><i class="dot active"></i>本周上课 <i class="dot inactive"></i>非本周课程 <i class="dot conflict"></i>时间冲突</p>
+    </section>
+    <footer>所有数据仅存储在此浏览器本地。</footer>
+  </main>
+
+  <dialog id="courseDialog" class="modal glass">
+    <form id="courseForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">课程信息</p><h2 id="courseDialogTitle">添加课程</h2></div><button type="button" class="icon-btn close" data-close="courseDialog">×</button></div>
+      <input id="courseId" type="hidden">
+      <label>课程名称<input id="courseName" required maxlength="40" placeholder="例如：高等数学"></label>
+      <label>教学地点<input id="courseLocation" maxlength="50" placeholder="例如：教学楼 A302"></label>
+      <div class="form-grid"><label>星期<select id="courseDay"></select></label><label>开始节次<select id="courseStart"></select></label></div>
+      <div class="form-grid"><label>连续节数<select id="courseDuration"></select></label><label>上课周类型<select id="courseWeekType"><option value="all">每周</option><option value="odd">单周</option><option value="even">双周</option></select></label></div>
+      <div class="form-grid"><label>起始教学周<select id="courseWeekStart"></select></label><label>结束教学周<select id="courseWeekEnd"></select></label></div>
+      <p id="conflictNotice" class="notice" hidden></p>
+      <div class="modal-actions"><button type="button" class="danger-btn" id="deleteCourseBtn" hidden>删除课程</button><button type="button" class="secondary-btn" data-close="courseDialog">取消</button><button type="submit" class="primary-btn">保存课程</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="modal glass">
+    <form id="settingsForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">个性化</p><h2>课表设置</h2></div><button type="button" class="icon-btn close" data-close="settingsDialog">×</button></div>
+      <label>课表名称<input id="scheduleName" type="text" maxlength="24" required placeholder="例如：大三下"></label>
+      <label>教学周开始日期<input id="termStart" type="date" required></label>
+      <p class="field-help">开始日所在的自然周将作为第 1 教学周。</p>
+      <div class="form-grid"><label>每天课节数<select id="periodCount"></select></label><label>每节时长（分钟）<input id="periodMinutes" type="number" min="15" max="240" step="5" required></label></div>
+      <label class="setting-check"><input id="usePresetTimes" type="checkbox">使用学校作息时间（默认，含午休与晚饭）</label>
+      <label>全局课间时长（分钟）<input id="breakMinutes" type="number" min="0" max="120" step="5" required></label>
+      <div class="form-grid"><label>第 2–3 节课间（分钟）<input id="breakAfter2" type="number" min="0" max="120" step="5" required></label><label>第 6–7 节课间（分钟）<input id="breakAfter6" type="number" min="0" max="120" step="5" required></label></div>
+      <div class="form-grid"><label>午休开始（第 4–5 节间）<input id="lunchStart" type="time" required></label><label>午休结束<input id="lunchEnd" type="time" required></label></div>
+      <div class="form-grid"><label>晚饭开始（第 8–9 节间）<input id="dinnerStart" type="time" required></label><label>晚饭结束<input id="dinnerEnd" type="time" required></label></div>
+      <label>第一节开始时间<input id="firstTime" type="time" required></label>
+      <label>Apple 地图搜索前缀<input id="mapSearchPrefix" type="text" maxlength="60" placeholder="例如：南昌工学院"></label>
+      <p class="field-help">导航时会在 Apple 地图中搜索“前缀 楼名”，例如“南昌工学院 明志楼”。</p>
+      <div class="backup-zone"><p>备份与恢复</p><div><button type="button" class="secondary-btn" id="exportBtn">导出课表数据</button><button type="button" class="secondary-btn" id="importBtn">导入课表数据</button><input id="importFile" type="file" accept="application/json,.json" hidden></div><small>导入会覆盖当前本机课表，建议先导出备份。</small></div>
+      <div class="danger-zone"><p>管理本地数据</p><div><button type="button" class="danger-btn" id="resetBtn">恢复示例课表</button><button type="button" class="danger-btn" id="clearBtn">清空课表</button></div></div>
+      <div class="modal-actions"><button type="button" class="secondary-btn" data-close="settingsDialog">取消</button><button type="submit" class="primary-btn">保存设置</button></div>
+    </form>
+  </dialog>
+  <dialog id="conflictDialog" class="modal glass">
+    <div class="conflict-dialog-content">
+      <div class="modal-head"><div><p class="eyebrow red-eyebrow">需要留意</p><h2>★ 课程冲突</h2></div><button type="button" class="icon-btn close" data-close="conflictDialog">×</button></div>
+      <p class="field-help">以下课程安排在同一星期、同一节次。请根据实际上课周次确认，或编辑课程进行调整。</p>
+      <div id="conflictCards" class="conflict-cards"></div>
+    </div>
+  </dialog>
+  <dialog id="reminderDialog" class="modal glass">
+    <div class="reminder-dialog">
+      <div class="modal-head"><div><p class="eyebrow">行程提醒</p><h2 id="reminderTitle">下一节课</h2></div><button type="button" class="icon-btn close" data-close="reminderDialog">×</button></div>
+      <div id="reminderBody"></div>
+    </div>
+  </dialog>
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service Worker 注册失败：', error)));
+    }
+  </script>
+</body>
+</html>
