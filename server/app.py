@@ -410,7 +410,7 @@ def test_push():
     payload = json.dumps({'title': '课表测试推送', 'body': 'test', 'url': './'}, ensure_ascii=False)
     for row in rows:
         try:
-            webpush(subscription_info=json.loads(row['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT})
+            webpush(subscription_info=json.loads(row['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT}, ttl=3600)
             sent += 1
         except WebPushException as error:
             failed += 1
@@ -497,7 +497,7 @@ def send_due_notifications():
                 payload = json.dumps({'title': '该出发了：' + str(course.get('name', '下一节课')), 'body': f"{course.get('location', '未填写地点')} · {start // 60:02d}:{start % 60:02d} 上课", 'url': './'})
                 for subscription in subscriptions:
                     try:
-                        webpush(subscription_info=json.loads(subscription['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT})
+                        webpush(subscription_info=json.loads(subscription['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT}, ttl=3600)
                         audit(row['user_id'], 'push_schedule_sent', f"课前推送成功：{course.get('name', '下一节课')}")
                     except WebPushException as error:
                         status_code = getattr(getattr(error, 'response', None), 'status_code', None)
