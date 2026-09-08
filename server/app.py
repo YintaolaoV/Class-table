@@ -236,16 +236,35 @@ def admin_overview():
     _, error = require_admin()
     if error:
         return error
+    filter_user = str(request.args.get('userId', '')).strip()[:40]
     conn = db()
     users = []
-    for row in conn.execute('SELECT u.user_id,u.created_at,u.updated_at,t.revision,t.updated_at AS timetable_updated,t.state_json FROM users u LEFT JOIN timetables t ON t.user_id=u.user_id ORDER BY u.updated_at DESC').fetchall():
+    user_query = 'SELECT u.user_id,u.created_at,u.updated_at,t.revision,t.updated_at AS timetable_updated,t.state_json FROM users u LEFT JOIN timetables t ON t.user_id=u.user_id'
+    user_params = ()
+    if filter_user:
+        user_query += ' WHERE u.user_id LIKE ?'
+        user_params = (f'%{filter_user}%',)
+    user_query += ' ORDER BY u.updated_at DESC'
+    for row in conn.execute(user_query, user_params).fetchall():
         try:
             state = json.loads(row['state_json'] or '{}')
         except Exception:
             state = {'settings': {}, 'courses': []}
         users.append({'userId': row['user_id'], 'createdAt': row['created_at'], 'updatedAt': row['updated_at'], 'revision': row['revision'] or 0, 'timetableUpdatedAt': row['timetable_updated'], 'state': state})
-    events = [{'userId': row['user_id'], 'level': row['level'], 'eventType': row['event_type'], 'message': row['message'], 'statusCode': row['status_code'], 'createdAt': row['created_at']} for row in conn.execute('SELECT user_id,level,event_type,message,status_code,created_at FROM audit_logs ORDER BY id DESC LIMIT 500').fetchall()]
-    summary = [{'event': row['event_type'], 'count': row['count']} for row in conn.execute('SELECT event_type,COUNT(*) AS count FROM audit_logs GROUP BY event_type ORDER BY count DESC').fetchall()]
+    log_query = 'SELECT user_id,level,event_type,message,status_code,created_at FROM audit_logs'
+    log_params = ()
+    if filter_user:
+        log_query += ' WHERE user_id LIKE ?'
+        log_params = (f'%{filter_user}%',)
+    log_query += ' ORDER BY id DESC LIMIT 500'
+    events = [{'userId': row['user_id'], 'level': row['level'], 'eventType': row['event_type'], 'message': row['message'], 'statusCode': row['status_code'], 'createdAt': row['created_at']} for row in conn.execute(log_query, log_params).fetchall()]
+    summary_query = 'SELECT event_type,COUNT(*) AS count FROM audit_logs'
+    summary_params = ()
+    if filter_user:
+        summary_query += ' WHERE user_id LIKE ?'
+        summary_params = (f'%{filter_user}%',)
+    summary_query += ' GROUP BY event_type ORDER BY count DESC'
+    summary = [{'event': row['event_type'], 'count': row['count']} for row in conn.execute(summary_query, summary_params).fetchall()]
     conn.close()
     return jsonify(users=users, events=events, summary=summary, generatedAt=now_text())
 
