@@ -70,6 +70,14 @@ def db():
         updated_at TEXT NOT NULL,
         FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS timetable_revisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        state_json TEXT NOT NULL,
+        saved_at TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+      );
       CREATE TABLE IF NOT EXISTS push_subscriptions (
         user_id TEXT NOT NULL,
         endpoint TEXT NOT NULL,
@@ -465,14 +473,28 @@ def put_timetable():
     if not isinstance(state, dict) or not isinstance(state.get('settings'), dict) or not isinstance(state.get('courses'), list):
         return jsonify(error='invalid_state'), 400
     conn = db()
-    row = conn.execute('SELECT revision FROM timetables WHERE user_id = ?', (user_id,)).fetchone()
+    row = conn.execute('SELECT revision,state_json FROM timetables WHERE user_id = ?', (user_id,)).fetchone()
     current = int(row['revision']) if row else 0
     client_revision = int(body.get('revision', 0) or 0)
     if row and client_revision != current:
         conn.close()
         return jsonify(error='revision_conflict', revision=current), 409
+    incoming_courses = len(state.get('courses', []))
+    existing_courses = 0
+    if row:
+        try:
+            existing_courses = len((json.loads(row['state_json']) or {}).get('courses', []))
+        except (TypeError, ValueError):
+            existing_courses = 0
+    if row and existing_courses > 0 and incoming_courses == 0 and not bool(body.get('allowEmptyOverwrite', False)):
+        conn.close()
+        audit(user_id, 'timetable_empty_overwrite_blocked', f'阻止空课表覆盖已有课表（已有 {existing_courses} 门）', 'warning', 409)
+        return jsonify(error='empty_overwrite_blocked', message='服务器已有课程，不能用空课表直接覆盖；请确认后再操作。', revision=current), 409
     revision = current + 1
     stamp = now_text()
+    if row:
+        conn.execute('INSERT INTO timetable_revisions(user_id,revision,state_json,saved_at) VALUES(?,?,?,?)', (user_id, current, row['state_json'], stamp))
+        conn.execute('DELETE FROM timetable_revisions WHERE user_id=? AND id NOT IN (SELECT id FROM timetable_revisions WHERE user_id=? ORDER BY id DESC LIMIT 50)', (user_id, user_id))
     conn.execute('UPDATE timetables SET revision=?, state_json=?, updated_at=? WHERE user_id=?', (revision, json.dumps(state, ensure_ascii=False, separators=(',', ':')), stamp, user_id))
     conn.commit()
     conn.close()
