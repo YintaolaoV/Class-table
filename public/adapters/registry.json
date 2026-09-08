@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "adapters": [
+    {
+      "id": "zhengfang-v9-html",
+      "name": "正方教务 V9（通用表格）",
+      "match": ["#kbgrid_table_0", "#kblist_table", ".td_wrap"],
+      "script": "./adapters/zhengfang-v9.js",
+      "source": "https://github.com/xingheyuzhuan/shiguang_warehouse",
+      "license": "MIT"
+    }
+  ]
+}
