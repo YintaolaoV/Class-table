@@ -79,6 +79,13 @@ def db():
         sent_at TEXT NOT NULL,
         PRIMARY KEY(user_id, course_key, class_date, kind)
       );
+      CREATE TABLE IF NOT EXISTS analytics_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        event_name TEXT NOT NULL,
+        event_target TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
     ''')
     # 兼容旧版已创建的 users 表
     columns = {row['name'] for row in conn.execute('PRAGMA table_info(users)').fetchall()}
@@ -169,9 +176,54 @@ def require_user():
     return user_id, None
 
 
+def require_admin():
+    user_id, error = require_user()
+    if error:
+        return None, error
+    if str(user_id).casefold() != 'admin':
+        return None, (jsonify(error='forbidden', message='只有 Admin 用户可以访问管理面板。'), 403)
+    return user_id, None
+
+
 @APP.get('/health')
 def health():
     return jsonify(ok=True, push=bool(webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY))
+
+
+@APP.post('/v1/analytics/event')
+def analytics_event():
+    user_id, error = require_user()
+    if error:
+        return error
+    body = request.get_json(silent=True) or {}
+    event_name = str(body.get('event', '')).strip()[:60]
+    event_target = str(body.get('target', '')).strip()[:120]
+    if not event_name or any(ch in event_name for ch in '\n\r'):
+        return jsonify(error='invalid_event'), 400
+    conn = db()
+    conn.execute('INSERT INTO analytics_events(user_id,event_name,event_target,created_at) VALUES(?,?,?,?)', (user_id, event_name, event_target, now_text()))
+    conn.commit()
+    conn.close()
+    return jsonify(ok=True)
+
+
+@APP.get('/v1/admin/overview')
+def admin_overview():
+    _, error = require_admin()
+    if error:
+        return error
+    conn = db()
+    users = []
+    for row in conn.execute('SELECT u.user_id,u.created_at,u.updated_at,t.revision,t.updated_at AS timetable_updated,t.state_json FROM users u LEFT JOIN timetables t ON t.user_id=u.user_id ORDER BY u.updated_at DESC').fetchall():
+        try:
+            state = json.loads(row['state_json'] or '{}')
+        except Exception:
+            state = {'settings': {}, 'courses': []}
+        users.append({'userId': row['user_id'], 'createdAt': row['created_at'], 'updatedAt': row['updated_at'], 'revision': row['revision'] or 0, 'timetableUpdatedAt': row['timetable_updated'], 'state': state})
+    events = [{'userId': row['user_id'], 'event': row['event_name'], 'target': row['event_target'], 'createdAt': row['created_at']} for row in conn.execute('SELECT user_id,event_name,event_target,created_at FROM analytics_events ORDER BY id DESC LIMIT 500').fetchall()]
+    summary = [{'event': row['event_name'], 'count': row['count']} for row in conn.execute('SELECT event_name,COUNT(*) AS count FROM analytics_events GROUP BY event_name ORDER BY count DESC').fetchall()]
+    conn.close()
+    return jsonify(users=users, events=events, summary=summary, generatedAt=now_text())
 
 
 @APP.get('/v1/push/public-key')
