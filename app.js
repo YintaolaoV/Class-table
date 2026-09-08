@@ -25,7 +25,6 @@
   function save(){try{localStorage.setItem(KEY,JSON.stringify(state));if(syncReady)queueSync();}catch(e){alert('无法保存到本地浏览器。请检查是否启用了隐私模式或浏览器存储权限。');}}
   function syncUrl(){return String(state.settings.syncEndpoint||DEFAULT_SYNC_ENDPOINT).replace(/\/$/,'');}
   function syncHeaders(){return {'Content-Type':'application/json','X-User-Id':String(state.settings.userId||'Admin'),'Authorization':`Bearer ${syncProfile.syncKey}`};}
-  function trackEvent(event,target=''){if(!syncProfile.syncKey)return;fetch(`${syncUrl()}/v1/analytics/event`,{method:'POST',headers:syncHeaders(),body:JSON.stringify({event,target})}).catch(()=>{});}
   async function loginSync(){const userId=String($('#userId')?.value||'').trim(),password=String($('#syncPassword')?.value||'');if(!userId||userId.length>40||password.length<4){setSyncStatus('请输入用户 ID 和至少 4 位密码。',true);return false;}const endpoint=String($('#syncEndpoint')?.value||DEFAULT_SYNC_ENDPOINT).trim().replace(/\/$/,'')||DEFAULT_SYNC_ENDPOINT;try{const response=await fetch(`${endpoint}/v1/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,password})});const result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.message||`HTTP ${response.status}`);state.settings.userId=userId;state.settings.syncEndpoint=endpoint;syncProfile.syncKey=String(result.token||'');syncProfile.revision=Number(result.revision||0);saveSyncProfile();syncReady=true;save();setSyncStatus(result.created?'已创建并登录服务器账号。':'已登录服务器账号，可同步课表。');return true;}catch(error){console.warn('登录失败',error);setSyncStatus(error.message||'登录失败，请检查服务器地址。',true);return false;}}
   function setSyncStatus(message,error=false){const el=$('#syncStatus');if(el){el.textContent=message;el.classList.toggle('sync-error',error);}}
   async function syncPush(manual=false){if(!syncProfile.syncKey){if(manual)setSyncStatus('请先填写服务器提供的同步密钥。',true);return false;}try{const response=await fetch(`${syncUrl()}/v1/timetable`,{method:'PUT',headers:syncHeaders(),body:JSON.stringify({revision:syncProfile.revision,state})});if(response.status===409){setSyncStatus('服务器有更新版本，请先拉取后再上传。',true);return false;}if(!response.ok)throw Error(`HTTP ${response.status}`);const result=await response.json();syncProfile.revision=Number(result.revision||syncProfile.revision);saveSyncProfile();setSyncStatus(`已同步 · ${new Date().toLocaleTimeString()}`);return true;}catch(error){console.warn('课表同步失败',error);if(manual)setSyncStatus('同步失败，请检查地址、密钥或网络。',true);return false;}}
@@ -112,8 +111,6 @@
   $('#clearBtn').onclick=()=>{if(confirm('确定清空全部课程吗？此操作仅会删除课表课程，且不可撤销。')){state.courses=[];save();render();$('#settingsDialog').close();}};
   $('#resetBtn').onclick=()=>{if(confirm('确定恢复示例课表和默认设置吗？你当前保存的课程与设置将被覆盖。')){state=defaults();save();render();$('#settingsDialog').close();}};
   render();
-  document.addEventListener('click',event=>{const target=event.target.closest('button,a');if(target)trackEvent('click',target.id||target.getAttribute('data-action')||target.textContent.trim().slice(0,60));});
-  trackEvent('page_view',location.pathname);
   showEntryReminder();
   syncReady=true;
   // 行程安排不能只在页面打开时判断：用户停留在页面内跨过上课时间后，

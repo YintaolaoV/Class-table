@@ -86,6 +86,15 @@ def db():
         event_target TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL DEFAULT '',
+        level TEXT NOT NULL DEFAULT 'info',
+        event_type TEXT NOT NULL,
+        message TEXT NOT NULL DEFAULT '',
+        status_code INTEGER,
+        created_at TEXT NOT NULL
+      );
     ''')
     # 兼容旧版已创建的 users 表
     columns = {row['name'] for row in conn.execute('PRAGMA table_info(users)').fetchall()}
@@ -96,6 +105,16 @@ def db():
 
 def now_text():
     return datetime.now(TZ).isoformat(timespec='seconds')
+
+
+def audit(user_id='', event_type='system', message='', level='info', status_code=None):
+    try:
+        conn = db()
+        conn.execute('INSERT INTO audit_logs(user_id,level,event_type,message,status_code,created_at) VALUES(?,?,?,?,?,?)', (str(user_id)[:40], str(level)[:12], str(event_type)[:60], str(message)[:240], status_code, now_text()))
+        conn.commit()
+        conn.close()
+    except Exception:
+        APP.logger.exception('audit log failed')
 
 
 def token_hash(token):
@@ -145,6 +164,7 @@ def login():
         # 旧版由管理员创建的账号首次登录时设置密码，之后即按密码校验。
         if stored and not password_matches(password, stored):
             conn.close()
+            audit(user_id, 'login_failed', '密码校验失败', 'warning', 401)
             return jsonify(error='invalid_credentials', message='用户 ID 或密码不正确。'), 401
         token = secrets.token_urlsafe(32)
         conn.execute('UPDATE users SET token_hash=?, password_hash=?, updated_at=? WHERE user_id=?', (token_hash(token), stored or password_hash(password), stamp, row['user_id']))
@@ -152,6 +172,7 @@ def login():
         revision = int(revision_row['revision']) if revision_row else 0
     conn.commit()
     conn.close()
+    audit(user_id, 'user_registered' if created else 'login_success', '创建账号并登录' if created else '登录成功')
     return jsonify(userId=user_id, token=token, revision=revision, created=created)
 
 
@@ -200,6 +221,9 @@ def analytics_event():
     event_target = str(body.get('target', '')).strip()[:120]
     if not event_name or any(ch in event_name for ch in '\n\r'):
         return jsonify(error='invalid_event'), 400
+    # 兼容旧版客户端，但不再保存全局 click/page_view 噪声。
+    if event_name in ('click', 'page_view'):
+        return jsonify(ok=True, ignored=True)
     conn = db()
     conn.execute('INSERT INTO analytics_events(user_id,event_name,event_target,created_at) VALUES(?,?,?,?)', (user_id, event_name, event_target, now_text()))
     conn.commit()
@@ -220,8 +244,8 @@ def admin_overview():
         except Exception:
             state = {'settings': {}, 'courses': []}
         users.append({'userId': row['user_id'], 'createdAt': row['created_at'], 'updatedAt': row['updated_at'], 'revision': row['revision'] or 0, 'timetableUpdatedAt': row['timetable_updated'], 'state': state})
-    events = [{'userId': row['user_id'], 'event': row['event_name'], 'target': row['event_target'], 'createdAt': row['created_at']} for row in conn.execute('SELECT user_id,event_name,event_target,created_at FROM analytics_events ORDER BY id DESC LIMIT 500').fetchall()]
-    summary = [{'event': row['event_name'], 'count': row['count']} for row in conn.execute('SELECT event_name,COUNT(*) AS count FROM analytics_events GROUP BY event_name ORDER BY count DESC').fetchall()]
+    events = [{'userId': row['user_id'], 'level': row['level'], 'eventType': row['event_type'], 'message': row['message'], 'statusCode': row['status_code'], 'createdAt': row['created_at']} for row in conn.execute('SELECT user_id,level,event_type,message,status_code,created_at FROM audit_logs ORDER BY id DESC LIMIT 500').fetchall()]
+    summary = [{'event': row['event_type'], 'count': row['count']} for row in conn.execute('SELECT event_type,COUNT(*) AS count FROM audit_logs GROUP BY event_type ORDER BY count DESC').fetchall()]
     conn.close()
     return jsonify(users=users, events=events, summary=summary, generatedAt=now_text())
 
@@ -264,6 +288,7 @@ def get_timetable():
     conn.close()
     if not row:
         return jsonify(error='not_found'), 404
+    audit(user_id, 'timetable_pull', '拉取课表')
     return jsonify(revision=row['revision'], state=json.loads(row['state_json']), updatedAt=row['updated_at'])
 
 
@@ -291,6 +316,7 @@ def put_timetable():
     conn.execute('UPDATE timetables SET revision=?, state_json=?, updated_at=? WHERE user_id=?', (revision, json.dumps(state, ensure_ascii=False, separators=(',', ':')), stamp, user_id))
     conn.commit()
     conn.close()
+    audit(user_id, 'timetable_push', f'上传课表，版本 {revision}')
     return jsonify(ok=True, revision=revision, updatedAt=stamp)
 
 
@@ -308,6 +334,7 @@ def add_subscription():
     conn.execute('INSERT INTO push_subscriptions(user_id, endpoint, subscription_json, updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id, endpoint) DO UPDATE SET subscription_json=excluded.subscription_json, updated_at=excluded.updated_at', (user_id, endpoint, payload, now_text()))
     conn.commit()
     conn.close()
+    audit(user_id, 'push_subscribed', '建立推送订阅')
     return jsonify(ok=True)
 
 
@@ -324,6 +351,7 @@ def delete_subscription():
         conn.execute('DELETE FROM push_subscriptions WHERE user_id=?', (user_id,))
     conn.commit()
     conn.close()
+    audit(user_id, 'push_unsubscribed', '关闭推送订阅')
     return jsonify(ok=True)
 
 
@@ -344,9 +372,17 @@ def test_push():
         try:
             webpush(subscription_info=json.loads(row['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT})
             sent += 1
-        except Exception:
+        except WebPushException as error:
             failed += 1
-            continue
+            status_code = getattr(getattr(error, 'response', None), 'status_code', None)
+            audit(user_id, 'push_test_failed', f'测试推送失败：{type(error).__name__}', 'error', status_code)
+        except Exception as error:
+            failed += 1
+            audit(user_id, 'push_test_failed', f'测试推送失败：{type(error).__name__}', 'error')
+    if not rows:
+        audit(user_id, 'push_test_no_subscription', '没有可用的推送订阅', 'warning')
+    elif sent:
+        audit(user_id, 'push_test_sent', f'测试推送成功，发送设备数 {sent}')
     return jsonify(ok=True, subscriptions=len(rows), sent=sent, failed=failed)
 
 
@@ -422,8 +458,14 @@ def send_due_notifications():
                 for subscription in subscriptions:
                     try:
                         webpush(subscription_info=json.loads(subscription['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT})
-                    except WebPushException:
-                        pass
+                        audit(row['user_id'], 'push_schedule_sent', f"课前推送成功：{course.get('name', '下一节课')}")
+                    except WebPushException as error:
+                        status_code = getattr(getattr(error, 'response', None), 'status_code', None)
+                        audit(row['user_id'], 'push_schedule_failed', f'课前推送失败：{type(error).__name__}', 'error', status_code)
+                        if status_code in (404, 410):
+                            conn.execute('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?', (row['user_id'], subscription['endpoint']))
+                    except Exception as error:
+                        audit(row['user_id'], 'push_schedule_failed', f'课前推送失败：{type(error).__name__}', 'error')
         except Exception:
             APP.logger.exception('notification check failed for %s', row['user_id'])
     conn.commit()
