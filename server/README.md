@@ -14,6 +14,14 @@ docker compose up -d --build
 
 服务默认只监听 `127.0.0.1:18110`，由 Caddy 代理到 `/class-table/`。用户通过管理员生成的同步密钥访问，不使用用户 ID 单独鉴权。
 
+Caddy 的 `api.vincentlee.asia` 站点需要加入以下路由，并放在最终 `respond "Not Found"` 之前：
+
+```caddyfile
+handle_path /class-table/* {
+    reverse_proxy 127.0.0.1:18110
+}
+```
+
 ## 用户初始化
 
 调用 `POST /v1/users/provision`，请求头带 `X-Bootstrap-Key`，请求体为 `{ "userId": "Admin" }`。响应中的 `syncKey` 只显示一次，应交给对应用户保存。

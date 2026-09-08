@@ -1,0 +1,13 @@
+[Unit]
+Description=Static timetable sync and Web Push API
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/apps/class-table-api
+EnvironmentFile=/opt/apps/class-table-api/.env
+ExecStart=/home/vincent/.local/bin/gunicorn --bind 127.0.0.1:18110 --workers 1 --threads 4 app:APP
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

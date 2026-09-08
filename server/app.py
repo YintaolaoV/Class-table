@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -24,6 +25,11 @@ DB_PATH = os.getenv('CLASS_TABLE_DB', '/data/class-table.sqlite3')
 BOOTSTRAP_KEY = os.getenv('CLASS_TABLE_BOOTSTRAP_KEY', '')
 VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+if os.getenv('VAPID_PRIVATE_KEY_B64'):
+    try:
+        VAPID_PRIVATE_KEY = base64.b64decode(os.getenv('VAPID_PRIVATE_KEY_B64', '')).decode('utf-8')
+    except Exception:
+        VAPID_PRIVATE_KEY = ''
 VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', 'mailto:admin@vincentlee.asia')
 TZ = ZoneInfo('Asia/Shanghai')
 MAX_STATE_BYTES = 1024 * 1024
@@ -225,6 +231,8 @@ def course_timing(course, settings):
         start, end = SCHOOL_PERIODS[start_period - 1], SCHOOL_PERIODS[end_period - 1]
         if not central and start_period in (3, 4):
             start = ('10:25', '11:05') if start_period == 3 else ('11:15', '11:55')
+        if not central and end_period in (3, 4):
+            end = ('10:25', '11:05') if end_period == 3 else ('11:15', '11:55')
         return minutes(start[0]), minutes(end[1])
     first = minutes(settings.get('firstTime', '08:20'))
     length = int(settings.get('periodMinutes', 40))
