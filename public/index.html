@@ -32,6 +32,13 @@
     .backup-zone div { display: flex; gap: 8px; flex-wrap: wrap; }
     .backup-zone small { display: block; margin-top: 9px; color: var(--muted); line-height: 1.4; }
     .modal { max-height: calc(100vh - 24px); overflow: auto; }
+    .auth-dialog { width: min(440px, calc(100vw - 26px)); }
+    .auth-dialog .reminder-dialog { padding: 24px; }
+    .auth-dialog .auth-lead { margin: 8px 0 16px; color: var(--muted); line-height: 1.55; }
+    .auth-dialog .auth-note { margin: 8px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.45; }
+    .auth-dialog .auth-error { min-height: 1.25em; margin: 10px 0 0; color: #c84d45; font-size: .82rem; }
+    .auth-dialog .auth-success { color: #23845c; }
+    .auth-dialog .auth-secondary { margin-top: 12px; text-align: center; }
     .table-actions { display: flex; align-items: center; gap: 4px; }
     .week-only-btn { margin-left: auto; padding: 8px 12px; border-radius: 13px; color: var(--muted); background: rgba(255,255,255,.5); border: 1px solid var(--line); font-size: .84rem; font-weight: 700; }
     .week-only-btn::before { content: '○'; margin-right: 5px; font-size: 1rem; vertical-align: -1px; }
@@ -146,6 +153,19 @@
     </section>
     <footer>默认保存在此浏览器本地；在课表设置中启用服务器同步后，可跨设备保存。</footer>
   </main>
+
+  <dialog id="authDialog" class="modal glass auth-dialog">
+    <form id="authForm" method="dialog" class="reminder-dialog">
+      <div class="modal-head"><div><p class="eyebrow">公测版访问</p><h2 id="authTitle">登录账号</h2></div></div>
+      <p id="authLead" class="auth-lead">请登录账号后使用 V课表公测版。</p>
+      <label>英文用户名<input id="authUserId" type="text" maxlength="40" autocomplete="username" required placeholder="例如：Vincent"></label>
+      <label>密码<input id="authPassword" type="password" minlength="4" maxlength="200" autocomplete="current-password" required placeholder="4 位以上字母或数字"></label>
+      <p id="authNote" class="auth-note">用户名以英文字母开头，可使用英文字母、数字和下划线；密码仅支持字母和数字。</p>
+      <p id="authStatus" class="auth-error" role="alert"></p>
+      <div class="modal-actions"><button type="submit" class="primary-btn" id="authSubmitBtn">登录</button></div>
+      <div class="auth-secondary"><button type="button" class="text-btn" id="authSwitchBtn">没有账号？注册</button></div>
+    </form>
+  </dialog>
 
   <dialog id="courseDialog" class="modal glass">
     <form id="courseForm" method="dialog">

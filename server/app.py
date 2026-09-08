@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -160,21 +161,28 @@ def login():
     body = request.get_json(silent=True) or {}
     user_id = str(body.get('userId', '')).strip()
     password = str(body.get('password', ''))
-    if not user_id or len(user_id) > 40 or any(ch in user_id for ch in '/\\\n\r'):
-        return jsonify(error='invalid_user_id', message='用户 ID 无效。'), 400
-    if len(password) < PASSWORD_MIN_LENGTH or len(password) > 200:
-        return jsonify(error='invalid_password', message='密码至少需要 4 位。'), 400
+    register = bool(body.get('register', False))
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{2,39}', user_id):
+        return jsonify(error='invalid_user_id', message='用户名需为 3–40 位英文字符，可包含数字和下划线。'), 400
+    if not re.fullmatch(r'[A-Za-z0-9]{4,200}', password):
+        return jsonify(error='invalid_password', message='密码需为 4–200 位字母或数字。'), 400
     conn = db()
     row = conn.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
     stamp = now_text()
     created = False
     if not row:
+        if not register:
+            conn.close()
+            return jsonify(error='invalid_credentials', message='用户 ID 或密码不正确；没有账号请先注册。'), 401
         token = secrets.token_urlsafe(32)
         conn.execute('INSERT INTO users(user_id, token_hash, password_hash, created_at, updated_at) VALUES(?,?,?,?,?)', (user_id, token_hash(token), password_hash(password), stamp, stamp))
         conn.execute('INSERT INTO timetables(user_id, state_json, updated_at) VALUES(?,?,?)', (user_id, json.dumps({'settings': {}, 'courses': []}), stamp))
         created = True
         revision = 0
     else:
+        if register:
+            conn.close()
+            return jsonify(error='user_exists', message='该用户名已存在，请直接登录。'), 409
         stored = row['password_hash']
         # 旧版由管理员创建的账号首次登录时设置密码，之后即按密码校验。
         if stored and not password_matches(password, stored):
