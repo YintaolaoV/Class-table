@@ -57,6 +57,9 @@
     .dorm-map-btn { padding: 10px 15px; border-radius: 14px; color: var(--blue); background: rgba(57,123,255,.1); border: 1px solid rgba(57,123,255,.18); font-size: .92rem; font-weight: 800; white-space: nowrap; }
     .next-course-content { margin-top: 12px; }
     .next-course-content .reminder-course { min-height: 0; }
+    .current-course-section { margin-top: 14px; }
+    .current-course-label { margin: 0 0 7px; color: #de5b49; font-size: .78rem; font-weight: 800; }
+    .current-course-section .reminder-course { background: linear-gradient(135deg, #e87961, #b75eaa); }
     .next-course-empty { margin: 0; padding: 12px 0 2px; color: var(--muted); font-size: .88rem; }
     .compact-view-btn { padding: 8px 12px; border-radius: 13px; color: var(--muted); background: rgba(255,255,255,.5); border: 1px solid var(--line); font-size: .84rem; font-weight: 700; }
     .compact-view-btn.is-active { color: #fff; background: linear-gradient(125deg, var(--blue), var(--violet)); box-shadow: 0 6px 13px rgba(86,111,190,.28); }
@@ -113,6 +116,7 @@
 
     <section class="next-course-card glass" aria-live="polite">
       <div class="next-course-heading"><div><p class="eyebrow">行程安排</p><h2>下一节课</h2></div><div class="next-course-actions"><button id="dormMapBtn" class="dorm-map-btn" type="button">⌂ 回宿舍</button><p id="nextCourseStatus" class="muted"></p></div></div>
+      <section id="currentCourseSection" class="current-course-section" hidden><p class="current-course-label">● 正在上课</p><div id="currentCourseContent"></div></section>
       <div id="nextCourseContent" class="next-course-content"></div>
     </section>
 
