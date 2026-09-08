@@ -24,4 +24,4 @@ handle_path /class-table/* {
 
 ## 用户初始化
 
-调用 `POST /v1/users/provision`，请求头带 `X-Bootstrap-Key`，请求体为 `{ "userId": "Admin" }`。响应中的 `syncKey` 只显示一次，应交给对应用户保存。
+在服务器终端执行 `python3 /opt/apps/class-table-api/provision_user.py Admin` 可创建或轮换用户密钥。响应中的 `syncKey` 只显示一次，应交给对应用户保存；轮换后旧设备需要重新填写密钥。
