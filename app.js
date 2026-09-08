@@ -87,4 +87,10 @@
   $('#resetBtn').onclick=()=>{if(confirm('确定恢复示例课表和默认设置吗？你当前保存的课程与设置将被覆盖。')){state=defaults();save();render();$('#settingsDialog').close();}};
   render();
   showEntryReminder();
+  // 行程安排不能只在页面打开时判断：用户停留在页面内跨过上课时间后，
+  // 也要切换到“正在上课”的卡片；从后台回到页面时立即重新计算。
+  const refreshItinerary=()=>renderNextCourseCard();
+  window.setInterval(refreshItinerary,30000);
+  window.addEventListener('focus',refreshItinerary);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshItinerary();});
 })();
