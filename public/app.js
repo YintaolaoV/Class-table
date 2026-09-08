@@ -4,7 +4,6 @@
   const DEFAULT_SYNC_ENDPOINT = 'https://api.vincentlee.asia/class-table';
   const SHORTCUT_INSTALL_URL = 'https://www.icloud.com/shortcuts/2e94d5d02fe54edbb717f1603c23fb71', SHORTCUT_VERSION = '2026-09-08-1';
   const days = ['周一','周二','周三','周四','周五','周六','周日'];
-  const PUBLIC_IMPORT_REGISTRY = './adapters/registry.json';
   const $ = s => document.querySelector(s);
   const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const nextMonday = () => { const d=new Date(); const offset=(8-d.getDay())%7 || 7; d.setDate(d.getDate()+offset); return localISO(d); };
@@ -139,11 +138,9 @@
   $('#clearBtn').onclick=()=>{if(confirm('确定清空全部课程吗？此操作仅会删除课表课程，且不可撤销。')){state.courses=[];save();render();$('#settingsDialog').close();}};
   $('#resetBtn').onclick=()=>{if(confirm('确定恢复空白默认设置吗？你当前保存的课程与设置将被覆盖。')){state=defaults();save();render();$('#settingsDialog').close();}};
   function parseImportText(raw){let text=String(raw||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');const parsed=JSON.parse(text),candidate=parsed?.data||parsed;if(!Array.isArray(candidate.courses))throw Error('courses 必须是数组');const normalized=normalizeState({settings:{...state.settings},courses:candidate.courses});if(!normalized.courses.length)throw Error('没有找到有效课程');return normalized.courses;}
-  function applyImportedCourses(raw){try{const courses=parseImportText(raw);if(!confirm(`识别到 ${courses.length} 门课程，将替换当前公测版课程。确定导入吗？`))return;state.courses=courses;save();render();$('#aiImportDialog')?.close();$('#eduImportDialog')?.close();alert(`已导入 ${courses.length} 门课程。`);}catch(error){alert(`导入失败：${error.message||'JSON 格式或课程字段不正确'}`);}}
+  function applyImportedCourses(raw){try{const courses=parseImportText(raw);if(!confirm(`识别到 ${courses.length} 门课程，将替换当前公测版课程。确定导入吗？`))return;state.courses=courses;save();render();$('#aiImportDialog')?.close();alert(`已导入 ${courses.length} 门课程。`);}catch(error){alert(`导入失败：${error.message||'JSON 格式或课程字段不正确'}`);}}
   async function copyPrompt(){try{const response=await fetch('./import-prompt.md');const prompt=await response.text();await copyText(prompt);alert('提示词已复制。');}catch(error){alert('无法读取提示词文件，请直接打开 public/import-prompt.md。');}}
-  async function showAdapters(){const list=$('#adapterList');if(!list)return;try{const response=await fetch(PUBLIC_IMPORT_REGISTRY);const data=await response.json();list.innerHTML=(data.adapters||[]).map(item=>`<div class="adapter-card"><strong>${escapeHTML(item.name)}</strong><small>页面特征：${escapeHTML((item.match||[]).join('、'))}<br>来源：${escapeHTML(item.source||'本地适配器')}（${escapeHTML(item.license||'未注明')}）</small></div>`).join('');}catch(error){list.innerHTML='<p class="field-help">适配器清单加载失败，但仍可粘贴已有 JSON 结果。</p>';}}
-  async function copyEduScript(){try{const response=await fetch('./adapters/zhengfang-v9.js');await copyText(await response.text());alert('脚本已复制。请在 Safari 快捷指令的“在网页上运行 JavaScript”动作中粘贴。');}catch(error){alert('无法读取适配器脚本。');}}
-  $('#aiImportBtn').onclick=()=>$('#aiImportDialog').showModal();$('#copyAiPromptBtn').onclick=copyPrompt;$('#applyAiImportBtn').onclick=()=>applyImportedCourses($('#aiJsonInput').value);$('#eduImportBtn').onclick=()=>{$('#eduImportDialog').showModal();showAdapters();};$('#copyEduScriptBtn').onclick=copyEduScript;$('#applyEduImportBtn').onclick=()=>applyImportedCourses($('#eduJsonInput').value);
+  $('#aiImportBtn').onclick=()=>$('#aiImportDialog').showModal();$('#copyAiPromptBtn').onclick=copyPrompt;$('#applyAiImportBtn').onclick=()=>applyImportedCourses($('#aiJsonInput').value);
   render();
   if(syncProfile.syncKey){syncReady=true;showEntryReminder();}else{syncReady=false;showAuth();}
   // 行程安排不能只在页面打开时判断：用户停留在页面内跨过上课时间后，
