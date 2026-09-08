@@ -1,0 +1,316 @@
+import hashlib
+import json
+import os
+import secrets
+import sqlite3
+import threading
+import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:  # API 仍可在未配置推送依赖时提供同步服务
+    webpush = None
+    WebPushException = Exception
+
+APP = Flask(__name__)
+ORIGIN = os.getenv('CLASS_TABLE_CORS_ORIGIN', 'https://class.vincentlee.asia')
+CORS(APP, resources={r'/v1/*': {'origins': [ORIGIN]}})
+DB_PATH = os.getenv('CLASS_TABLE_DB', '/data/class-table.sqlite3')
+BOOTSTRAP_KEY = os.getenv('CLASS_TABLE_BOOTSTRAP_KEY', '')
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', 'mailto:admin@vincentlee.asia')
+TZ = ZoneInfo('Asia/Shanghai')
+MAX_STATE_BYTES = 1024 * 1024
+
+SCHOOL_PERIODS = [
+    ('08:20', '09:00'), ('09:10', '09:50'), ('10:15', '10:55'),
+    ('11:05', '11:45'), ('14:00', '14:40'), ('14:50', '15:30'),
+    ('15:55', '16:35'), ('16:45', '17:25'), ('19:00', '19:40'),
+    ('19:50', '20:30')
+]
+
+
+def db():
+    os.makedirs(os.path.dirname(DB_PATH) or '.', exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.executescript('''
+      CREATE TABLE IF NOT EXISTS users (
+        user_id TEXT PRIMARY KEY COLLATE NOCASE,
+        token_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS timetables (
+        user_id TEXT PRIMARY KEY COLLATE NOCASE,
+        revision INTEGER NOT NULL DEFAULT 0,
+        state_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        user_id TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        subscription_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(user_id, endpoint),
+        FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS sent_notifications (
+        user_id TEXT NOT NULL,
+        course_key TEXT NOT NULL,
+        class_date TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        sent_at TEXT NOT NULL,
+        PRIMARY KEY(user_id, course_key, class_date, kind)
+      );
+    ''')
+    return conn
+
+
+def now_text():
+    return datetime.now(TZ).isoformat(timespec='seconds')
+
+
+def token_hash(token):
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def auth_user():
+    user_id = (request.headers.get('X-User-Id') or '').strip()
+    auth = request.headers.get('Authorization', '')
+    token = auth[7:].strip() if auth.lower().startswith('bearer ') else ''
+    if not user_id or not token:
+        return None
+    conn = db()
+    row = conn.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
+    conn.close()
+    if not row or not secrets.compare_digest(row['token_hash'], token_hash(token)):
+        return None
+    return row['user_id']
+
+
+def require_user():
+    user_id = auth_user()
+    if not user_id:
+        return None, (jsonify(error='unauthorized', message='用户 ID 或同步密钥无效。'), 401)
+    return user_id, None
+
+
+@APP.get('/health')
+def health():
+    return jsonify(ok=True, push=bool(webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY))
+
+
+@APP.get('/v1/push/public-key')
+def public_key():
+    return jsonify(publicKey=VAPID_PUBLIC_KEY or None)
+
+
+@APP.post('/v1/users/provision')
+def provision():
+    if not BOOTSTRAP_KEY or not secrets.compare_digest(request.headers.get('X-Bootstrap-Key', ''), BOOTSTRAP_KEY):
+        return jsonify(error='forbidden'), 403
+    body = request.get_json(silent=True) or {}
+    user_id = str(body.get('userId', '')).strip()
+    if not user_id or len(user_id) > 40 or any(ch in user_id for ch in '/\\\n\r'):
+        return jsonify(error='invalid_user_id'), 400
+    token = secrets.token_urlsafe(32)
+    stamp = now_text()
+    conn = db()
+    try:
+        conn.execute('INSERT INTO users(user_id, token_hash, created_at, updated_at) VALUES(?,?,?,?)', (user_id, token_hash(token), stamp, stamp))
+        conn.execute('INSERT INTO timetables(user_id, state_json, updated_at) VALUES(?,?,?)', (user_id, json.dumps({'settings': {}, 'courses': []}), stamp))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return jsonify(error='user_exists'), 409
+    finally:
+        conn.close()
+    return jsonify(userId=user_id, syncKey=token), 201
+
+
+@APP.get('/v1/timetable')
+def get_timetable():
+    user_id, error = require_user()
+    if error:
+        return error
+    conn = db()
+    row = conn.execute('SELECT revision, state_json, updated_at FROM timetables WHERE user_id = ?', (user_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify(error='not_found'), 404
+    return jsonify(revision=row['revision'], state=json.loads(row['state_json']), updatedAt=row['updated_at'])
+
+
+@APP.put('/v1/timetable')
+def put_timetable():
+    user_id, error = require_user()
+    if error:
+        return error
+    raw = request.get_data(cache=True)
+    if len(raw) > MAX_STATE_BYTES:
+        return jsonify(error='payload_too_large'), 413
+    body = request.get_json(silent=True) or {}
+    state = body.get('state')
+    if not isinstance(state, dict) or not isinstance(state.get('settings'), dict) or not isinstance(state.get('courses'), list):
+        return jsonify(error='invalid_state'), 400
+    conn = db()
+    row = conn.execute('SELECT revision FROM timetables WHERE user_id = ?', (user_id,)).fetchone()
+    current = int(row['revision']) if row else 0
+    client_revision = int(body.get('revision', 0) or 0)
+    if row and client_revision != current:
+        conn.close()
+        return jsonify(error='revision_conflict', revision=current), 409
+    revision = current + 1
+    stamp = now_text()
+    conn.execute('UPDATE timetables SET revision=?, state_json=?, updated_at=? WHERE user_id=?', (revision, json.dumps(state, ensure_ascii=False, separators=(',', ':')), stamp, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify(ok=True, revision=revision, updatedAt=stamp)
+
+
+@APP.post('/v1/push/subscription')
+def add_subscription():
+    user_id, error = require_user()
+    if error:
+        return error
+    body = request.get_json(silent=True) or {}
+    endpoint = str(body.get('endpoint', '')).strip()
+    if not endpoint or not isinstance(body.get('keys'), dict):
+        return jsonify(error='invalid_subscription'), 400
+    payload = json.dumps({'endpoint': endpoint, 'keys': body['keys']}, ensure_ascii=False)
+    conn = db()
+    conn.execute('INSERT INTO push_subscriptions(user_id, endpoint, subscription_json, updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id, endpoint) DO UPDATE SET subscription_json=excluded.subscription_json, updated_at=excluded.updated_at', (user_id, endpoint, payload, now_text()))
+    conn.commit()
+    conn.close()
+    return jsonify(ok=True)
+
+
+@APP.delete('/v1/push/subscription')
+def delete_subscription():
+    user_id, error = require_user()
+    if error:
+        return error
+    body = request.get_json(silent=True) or {}
+    conn = db()
+    if body.get('endpoint'):
+        conn.execute('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?', (user_id, body['endpoint']))
+    else:
+        conn.execute('DELETE FROM push_subscriptions WHERE user_id=?', (user_id,))
+    conn.commit()
+    conn.close()
+    return jsonify(ok=True)
+
+
+def minutes(value):
+    hour, minute = [int(part) for part in str(value).split(':')[:2]]
+    return hour * 60 + minute
+
+
+def course_timing(course, settings):
+    start_period = int(course.get('start', 1))
+    duration = max(1, int(course.get('duration', 1)))
+    location = str(course.get('location', ''))
+    central = any(name in location for name in ('明志楼', '明德楼', '至善楼'))
+    if settings.get('usePresetTimes', True) and 1 <= start_period <= len(SCHOOL_PERIODS):
+        end_period = min(start_period + duration - 1, len(SCHOOL_PERIODS))
+        start, end = SCHOOL_PERIODS[start_period - 1], SCHOOL_PERIODS[end_period - 1]
+        if not central and start_period in (3, 4):
+            start = ('10:25', '11:05') if start_period == 3 else ('11:15', '11:55')
+        return minutes(start[0]), minutes(end[1])
+    first = minutes(settings.get('firstTime', '08:20'))
+    length = int(settings.get('periodMinutes', 40))
+    current = first
+    for period in range(1, start_period):
+        current += length
+        if period == 4:
+            current = max(current, minutes(settings.get('lunchEnd', '14:00')))
+        elif period == 8:
+            current = max(current, minutes(settings.get('dinnerEnd', '19:00')))
+        else:
+            current += int(settings.get('breakAfter2' if period == 2 else 'breakAfter6' if period == 6 else 'breakMinutes', 10))
+    return current, current + duration * length
+
+
+def active_on(course, date, settings):
+    try:
+        start = datetime.strptime(str(settings['termStart']), '%Y-%m-%d').date()
+        diff = (date - start).days
+        if diff < 0:
+            return False
+        week = diff // 7 + 1
+        week_type = 'odd' if week % 2 else 'even'
+        return int(course.get('day')) == (date.weekday() + 1) and int(course.get('weekStart', 1)) <= week <= int(course.get('weekEnd', 16)) and course.get('weekType', 'all') in ('all', week_type)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def send_due_notifications():
+    if not (webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY):
+        return
+    now = datetime.now(TZ).replace(second=0, microsecond=0)
+    conn = db()
+    rows = conn.execute('SELECT u.user_id, t.state_json FROM users u JOIN timetables t ON t.user_id=u.user_id').fetchall()
+    for row in rows:
+        try:
+            state = json.loads(row['state_json'])
+            settings, courses = state.get('settings', {}), state.get('courses', [])
+            subscriptions = conn.execute('SELECT endpoint, subscription_json FROM push_subscriptions WHERE user_id=?', (row['user_id'],)).fetchall()
+            for course in courses:
+                if not active_on(course, now.date(), settings):
+                    continue
+                start, _ = course_timing(course, settings)
+                departure = now.replace(hour=0, minute=0) + timedelta(minutes=start - 20)
+                if departure != now:
+                    continue
+                key = (row['user_id'], str(course.get('id')), now.date().isoformat(), 'departure')
+                try:
+                    conn.execute('INSERT INTO sent_notifications VALUES(?,?,?,?,?)', (*key, now_text()))
+                except sqlite3.IntegrityError:
+                    continue
+                payload = json.dumps({'title': '该出发了：' + str(course.get('name', '下一节课')), 'body': f"{course.get('location', '未填写地点')} · {start // 60:02d}:{start % 60:02d} 上课", 'url': './'})
+                for subscription in subscriptions:
+                    try:
+                        webpush(subscription_info=json.loads(subscription['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT})
+                    except WebPushException:
+                        pass
+        except Exception:
+            APP.logger.exception('notification check failed for %s', row['user_id'])
+    conn.commit()
+    conn.close()
+
+
+def scheduler():
+    while True:
+        try:
+            send_due_notifications()
+        except Exception:
+            APP.logger.exception('scheduler failed')
+        time.sleep(30)
+
+
+_scheduler_started = False
+_scheduler_lock = threading.Lock()
+
+
+@APP.before_request
+def ensure_scheduler():
+    global _scheduler_started
+    if _scheduler_started:
+        return
+    with _scheduler_lock:
+        if not _scheduler_started:
+            threading.Thread(target=scheduler, daemon=True, name='class-table-push-scheduler').start()
+            _scheduler_started = True
+
+
+if __name__ == '__main__':
+    APP.run(host='0.0.0.0', port=int(os.getenv('PORT', '8080')))
