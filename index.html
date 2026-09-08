@@ -52,13 +52,14 @@
     .next-course-card { margin: 18px 0; padding: 18px; border-radius: 28px; }
     .next-course-heading { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
     .next-course-heading h2 { margin: 0; font-size: 1.2rem; letter-spacing: -.04em; }
+    .next-course-heading h2.is-current { color: #d94c43; }
     .next-course-heading .muted { text-align: right; font-size: .78rem; }
     .next-course-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
     .dorm-map-btn { padding: 10px 15px; border-radius: 14px; color: var(--blue); background: rgba(57,123,255,.1); border: 1px solid rgba(57,123,255,.18); font-size: .92rem; font-weight: 800; white-space: nowrap; }
     .next-course-content { margin-top: 12px; }
     .next-course-content .reminder-course { min-height: 0; }
     .current-course-section { margin-top: 14px; }
-    .current-course-label { margin: 0 0 7px; color: #de5b49; font-size: .78rem; font-weight: 800; }
+    .next-lesson-label { margin: 15px 0 7px; color: var(--muted); font-size: .82rem; font-weight: 800; }
     .current-course-section .reminder-course { background: linear-gradient(135deg, #e87961, #b75eaa); }
     .next-course-empty { margin: 0; padding: 12px 0 2px; color: var(--muted); font-size: .88rem; }
     .compact-view-btn { padding: 8px 12px; border-radius: 13px; color: var(--muted); background: rgba(255,255,255,.5); border: 1px solid var(--line); font-size: .84rem; font-weight: 700; }
@@ -115,8 +116,8 @@
     </section>
 
     <section class="next-course-card glass" aria-live="polite">
-      <div class="next-course-heading"><div><p class="eyebrow">行程安排</p><h2>下一节课</h2></div><div class="next-course-actions"><button id="dormMapBtn" class="dorm-map-btn" type="button">⌂ 回宿舍</button><p id="nextCourseStatus" class="muted"></p></div></div>
-      <section id="currentCourseSection" class="current-course-section" hidden><p class="current-course-label">● 正在上课</p><div id="currentCourseContent"></div></section>
+      <div class="next-course-heading"><div><p class="eyebrow">行程安排</p><h2 id="itineraryTitle">下一节课</h2></div><div class="next-course-actions"><button id="dormMapBtn" class="dorm-map-btn" type="button">⌂ 回宿舍</button><p id="nextCourseStatus" class="muted"></p></div></div>
+      <section id="currentCourseSection" class="current-course-section" hidden><div id="currentCourseContent"></div></section>
       <div id="nextCourseContent" class="next-course-content"></div>
     </section>
 
