@@ -16,7 +16,7 @@
 .settings-description{margin:0 0 16px;color:var(--muted);font-size:.78rem;line-height:1.45}
 .settings-mobile-back{display:none}
 @keyframes settingsIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.calendar-open-btn{display:block;margin:10px 0 11px;padding:13px 15px;border-radius:15px;text-align:center;text-decoration:none;color:#fff;background:linear-gradient(125deg,var(--blue),var(--violet));box-shadow:0 7px 16px rgba(86,111,190,.24);font-weight:850;font-size:.96rem}
 @media(max-width:650px){.settings-layout{display:block;min-height:0}.settings-nav{position:static;background:transparent;padding:0;gap:8px}.settings-nav-item{flex-direction:row;align-items:center;justify-content:space-between;padding:15px 14px;background:rgba(80,112,190,.08);border:1px solid var(--line)}.settings-nav-item span{font-size:.92rem}.settings-nav-item small{font-size:.72rem}.settings-nav-item small::after{content:'  ›';font-size:1rem}.settings-panels{display:none}.settings-layout.mobile-detail .settings-nav{display:none}.settings-layout.mobile-detail .settings-panels{display:block}.settings-mobile-back{display:block;margin:0 0 13px;padding:4px 0;color:var(--blue);background:transparent;font-size:.82rem;font-weight:700}.settings-layout.mobile-detail .settings-mobile-back{display:block}.settings-panel h3{font-size:1.16rem}.settings-description{margin-bottom:14px}}
-
 
 
