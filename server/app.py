@@ -7,6 +7,7 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, request
@@ -25,11 +26,15 @@ DB_PATH = os.getenv('CLASS_TABLE_DB', '/data/class-table.sqlite3')
 BOOTSTRAP_KEY = os.getenv('CLASS_TABLE_BOOTSTRAP_KEY', '')
 VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+VAPID_PRIVATE_KEY_FILE = os.getenv('VAPID_PRIVATE_KEY_FILE', '')
 if os.getenv('VAPID_PRIVATE_KEY_B64'):
     try:
         VAPID_PRIVATE_KEY = base64.b64decode(os.getenv('VAPID_PRIVATE_KEY_B64', '')).decode('utf-8')
     except Exception:
         VAPID_PRIVATE_KEY = ''
+if VAPID_PRIVATE_KEY_FILE and Path(VAPID_PRIVATE_KEY_FILE).is_file():
+    # 传入文件路径，兼容 pywebpush 对 PEM 文件的加载方式。
+    VAPID_PRIVATE_KEY = VAPID_PRIVATE_KEY_FILE
 VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', 'mailto:admin@vincentlee.asia')
 TZ = ZoneInfo('Asia/Shanghai')
 MAX_STATE_BYTES = 1024 * 1024
@@ -228,6 +233,22 @@ def analytics_event():
     conn.execute('INSERT INTO analytics_events(user_id,event_name,event_target,created_at) VALUES(?,?,?,?)', (user_id, event_name, event_target, now_text()))
     conn.commit()
     conn.close()
+    return jsonify(ok=True)
+
+
+@APP.post('/v1/diagnostics/push')
+def push_diagnostic():
+    user_id, error = require_user()
+    if error:
+        return error
+    body = request.get_json(silent=True) or {}
+    stage = str(body.get('stage', '')).strip()[:60]
+    detail = str(body.get('error', '')).strip()[:200]
+    browser = str(body.get('browser', '')).strip()[:120]
+    mode = str(body.get('mode', '')).strip()[:30]
+    if not stage:
+        return jsonify(error='invalid_diagnostic'), 400
+    audit(user_id, 'push_client_failed', f'客户端阶段 {stage}：{detail or "未提供错误"}；模式 {mode}；浏览器 {browser}', 'error')
     return jsonify(ok=True)
 
 
