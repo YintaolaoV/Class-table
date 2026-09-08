@@ -201,7 +201,7 @@
         const response = await fetch(endpoint + '/v1/push/test', { method:'POST', headers:{'Content-Type':'application/json','X-User-Id':userId,'Authorization':'Bearer '+profile.syncKey} });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw Error(result.message || '测试推送失败');
-        alert(result.sent ? '测试推送已发送：test' : '没有可用的推送设备，请先启用课前推送。');
+        alert(result.sent ? '测试推送已发送：test' : (result.subscriptions ? `发现 ${result.subscriptions} 个订阅，但发送失败，请重新启用课前推送。` : '没有可用的推送设备，请先启用课前推送。'));
       } catch (error) { alert(error.message || '测试推送失败'); }
     });
   </script>
