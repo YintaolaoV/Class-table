@@ -188,7 +188,23 @@
       <div id="reminderBody"></div>
     </div>
   </dialog>
+  <button id="testPushButton" type="button" style="position:fixed;right:18px;bottom:18px;z-index:20;border:0;border-radius:999px;padding:12px 18px;background:#e05267;color:#fff;font-weight:800;box-shadow:0 8px 22px #e0526755">测试推送</button>
   <script src="app.js"></script>
+  <script>
+    document.getElementById('testPushButton').addEventListener('click', async () => {
+      try {
+        const profile = JSON.parse(localStorage.getItem('liquid-timetable-sync-v1') || '{}');
+        const data = JSON.parse(localStorage.getItem('liquid-timetable-v1') || '{}');
+        const endpoint = String(data.settings?.syncEndpoint || 'https://api.vincentlee.asia/class-table').replace(/\/$/, '');
+        const userId = String(data.settings?.userId || 'Admin');
+        if (!profile.syncKey) throw Error('请先登录并启用课前推送。');
+        const response = await fetch(endpoint + '/v1/push/test', { method:'POST', headers:{'Content-Type':'application/json','X-User-Id':userId,'Authorization':'Bearer '+profile.syncKey} });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw Error(result.message || '测试推送失败');
+        alert(result.sent ? '测试推送已发送：test' : '没有可用的推送设备，请先启用课前推送。');
+      } catch (error) { alert(error.message || '测试推送失败'); }
+    });
+  </script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service Worker 注册失败：', error)));

@@ -327,6 +327,27 @@ def delete_subscription():
     return jsonify(ok=True)
 
 
+@APP.post('/v1/push/test')
+def test_push():
+    user_id, error = require_user()
+    if error:
+        return error
+    if not (webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY):
+        return jsonify(error='push_disabled', message='服务器推送服务未配置。'), 503
+    conn = db()
+    rows = conn.execute('SELECT endpoint, subscription_json FROM push_subscriptions WHERE user_id=?', (user_id,)).fetchall()
+    conn.close()
+    sent = 0
+    payload = json.dumps({'title': '课表测试推送', 'body': 'test', 'url': './'}, ensure_ascii=False)
+    for row in rows:
+        try:
+            webpush(subscription_info=json.loads(row['subscription_json']), data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={'sub': VAPID_SUBJECT})
+            sent += 1
+        except Exception:
+            continue
+    return jsonify(ok=True, sent=sent)
+
+
 def minutes(value):
     hour, minute = [int(part) for part in str(value).split(':')[:2]]
     return hour * 60 + minute
