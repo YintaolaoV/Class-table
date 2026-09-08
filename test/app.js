@@ -101,6 +101,7 @@
   $('#deleteCourseBtn').onclick=()=>{if(editingId&&confirm('确定删除这门课程吗？此操作不可撤销。')){state.courses=state.courses.filter(c=>c.id!==editingId);save();render();$('#courseDialog').close();}};
   $('#settingsForm').onsubmit=e=>{e.preventDefault();const lunchStart=$('#lunchStart').value,lunchEnd=$('#lunchEnd').value,dinnerStart=$('#dinnerStart').value,dinnerEnd=$('#dinnerEnd').value;if(minutesOf(lunchEnd)<=minutesOf(lunchStart)||minutesOf(dinnerEnd)<=minutesOf(dinnerStart)){alert('午休和晚饭的结束时间必须晚于开始时间。');return;}state.settings={...state.settings,scheduleName:$('#scheduleName').value.trim()||'课表',termStart:$('#termStart').value,periodCount:+$('#periodCount').value,periodMinutes:+$('#periodMinutes').value,usePresetTimes:$('#usePresetTimes').checked,breakMinutes:+$('#breakMinutes').value,breakAfter2:+$('#breakAfter2').value,breakAfter6:+$('#breakAfter6').value,lunchStart,lunchEnd,dinnerStart,dinnerEnd,firstTime:$('#firstTime').value,mapSearchPrefix:$('#mapSearchPrefix').value.trim().slice(0,60),dormLocation:$('#dormLocation').value.trim().slice(0,80),userId:$('#userId').value.trim().slice(0,40)||'Admin',syncEndpoint:$('#syncEndpoint').value.trim().replace(/\/$/,'').slice(0,160)||DEFAULT_SYNC_ENDPOINT};saveSyncProfile();state=normalizeState(state);state.courses=state.courses.map(c=>({...c,start:Math.min(c.start,state.settings.periodCount),duration:Math.min(c.duration,state.settings.periodCount-c.start+1)}));save();render();$('#settingsDialog').close();};
   $('#loginBtn').onclick=async()=>{captureSyncFields();await loginSync();};
+  $('#syncLogoutBtn').onclick=()=>{if(confirm('确定退出当前服务器账号吗？本机课表不会被删除。')){syncProfile={syncKey:'',revision:0};syncReady=false;saveSyncProfile();setSyncStatus('已退出服务器账号；本机课表仍可离线使用。');}};
   function captureSyncFields(){state.settings.userId=$('#userId').value.trim().slice(0,40)||'Admin';state.settings.syncEndpoint=$('#syncEndpoint').value.trim().replace(/\/$/,'').slice(0,160)||DEFAULT_SYNC_ENDPOINT;saveSyncProfile();}
   $('#syncPushBtn').onclick=async()=>{captureSyncFields();save();await syncPush(true);};
   $('#syncPullBtn').onclick=async()=>{captureSyncFields();await syncPull(true);};
@@ -121,5 +122,4 @@
   window.addEventListener('focus',refreshItinerary);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshItinerary();});
 })();
-
 
