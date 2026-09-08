@@ -121,6 +121,13 @@
       .course { padding: 7px; }
     }
     @media (pointer: coarse) { .course button { display: none; } }
+    .course { touch-action: none; cursor: grab; }
+    .course.dragging { opacity: .28; transform: scale(.98); }
+    .drag-ghost { position: fixed; z-index: 30; pointer-events: none; margin: 0; opacity: .94; transform: rotate(1.5deg) scale(1.03); box-shadow: 0 18px 35px rgba(43,57,110,.35); }
+    .slot.drag-target { background: rgba(73, 126, 255, .3); border-color: rgba(73, 126, 255, .78); box-shadow: inset 0 0 0 2px rgba(255,255,255,.44); }
+    .drag-toast { position: fixed; z-index: 40; left: 50%; bottom: 22px; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 28px); padding: 10px 12px 10px 15px; color: #fff; background: rgba(25,36,67,.92); border: 1px solid rgba(255,255,255,.18); border-radius: 15px; box-shadow: 0 12px 32px rgba(20,35,75,.28); transform: translateX(-50%); backdrop-filter: blur(14px); }
+    .drag-toast button { padding: 6px 9px; color: #bcd2ff; background: transparent; border: 1px solid rgba(188,210,255,.42); border-radius: 9px; font-weight: 750; }
+    .drag-toast button:hover { background: rgba(255,255,255,.12); }
   </style>
 </head>
 <body>
@@ -147,7 +154,7 @@
     </section>
 
     <section class="timetable-card glass">
-      <div class="table-toolbar"><div><h2>本周课程</h2><p id="scheduleHint" class="muted">课程会随单双周自动显示</p><p class="schedule-edit-hint">提示：长按课程卡片 0.5 秒可编辑</p></div><button id="compactViewBtn" class="compact-view-btn" type="button" aria-pressed="false">紧凑视图</button><button id="weekOnlyBtn" class="week-only-btn" type="button" aria-pressed="false">只显示本周课程</button><div class="week-nav" aria-label="教学周切换"><button id="prevWeekBtn" class="week-nav-btn" type="button">上一周</button><button id="nextWeekBtn" class="week-nav-btn" type="button">下一周</button><button id="currentWeekBtn" class="week-nav-btn current-week-btn" type="button" hidden>回到本周</button></div><div class="table-actions"><button id="conflictBtn" class="conflict-btn" hidden>★ 课程冲突</button><button id="todayBtn" class="text-btn">定位今天</button></div></div>
+      <div class="table-toolbar"><div><h2>本周课程</h2><p id="scheduleHint" class="muted">课程会随单双周自动显示</p><p class="schedule-edit-hint">提示：短按课程卡片可编辑，长按 0.5 秒后拖动调整时间</p></div><button id="compactViewBtn" class="compact-view-btn" type="button" aria-pressed="false">紧凑视图</button><button id="weekOnlyBtn" class="week-only-btn" type="button" aria-pressed="false">只显示本周课程</button><div class="week-nav" aria-label="教学周切换"><button id="prevWeekBtn" class="week-nav-btn" type="button">上一周</button><button id="nextWeekBtn" class="week-nav-btn" type="button">下一周</button><button id="currentWeekBtn" class="week-nav-btn current-week-btn" type="button" hidden>回到本周</button></div><div class="table-actions"><button id="conflictBtn" class="conflict-btn" hidden>★ 课程冲突</button><button id="todayBtn" class="text-btn">定位今天</button></div></div>
       <div class="schedule-scroll"><div id="schedule" class="schedule" aria-label="周课表"></div></div>
       <p class="legend"><i class="dot active"></i>本周上课 <i class="dot inactive"></i>非本周课程 <i class="dot conflict"></i>时间冲突</p>
     </section>
@@ -242,6 +249,7 @@
       <div id="reminderBody"></div>
     </div>
   </dialog>
+  <div id="dragToast" class="drag-toast" role="status" aria-live="polite" hidden><span id="dragToastText"></span><button type="button" id="dragUndoBtn">撤销</button></div>
   <script src="app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
