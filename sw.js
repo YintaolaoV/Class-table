@@ -1,4 +1,4 @@
-const CACHE_NAME = 'static-timetable-shell-v1.0.32';
+const CACHE_NAME = 'static-timetable-shell-v1.0.33';
 const APP_SHELL = [
   './', './index.html', './styles.css', './app.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
