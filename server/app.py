@@ -33,6 +33,7 @@ if os.getenv('VAPID_PRIVATE_KEY_B64'):
 VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', 'mailto:admin@vincentlee.asia')
 TZ = ZoneInfo('Asia/Shanghai')
 MAX_STATE_BYTES = 1024 * 1024
+PASSWORD_MIN_LENGTH = 4
 
 SCHOOL_PERIODS = [
     ('08:20', '09:00'), ('09:10', '09:50'), ('10:15', '10:55'),
@@ -51,6 +52,7 @@ def db():
       CREATE TABLE IF NOT EXISTS users (
         user_id TEXT PRIMARY KEY COLLATE NOCASE,
         token_hash TEXT NOT NULL,
+        password_hash TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -78,6 +80,10 @@ def db():
         PRIMARY KEY(user_id, course_key, class_date, kind)
       );
     ''')
+    # 兼容旧版已创建的 users 表
+    columns = {row['name'] for row in conn.execute('PRAGMA table_info(users)').fetchall()}
+    if 'password_hash' not in columns:
+        conn.execute('ALTER TABLE users ADD COLUMN password_hash TEXT')
     return conn
 
 
@@ -87,6 +93,59 @@ def now_text():
 
 def token_hash(token):
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def password_hash(password, salt=None):
+    salt = salt or secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 210000)
+    return f'pbkdf2$210000${base64.urlsafe_b64encode(salt).decode()}${base64.urlsafe_b64encode(digest).decode()}'
+
+
+def password_matches(password, encoded):
+    try:
+        scheme, rounds, salt_text, digest_text = encoded.split('$', 3)
+        if scheme != 'pbkdf2':
+            return False
+        salt = base64.urlsafe_b64decode(salt_text.encode())
+        digest = base64.urlsafe_b64decode(digest_text.encode())
+        check = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, int(rounds))
+        return secrets.compare_digest(check, digest)
+    except Exception:
+        return False
+
+
+@APP.post('/v1/auth/login')
+def login():
+    body = request.get_json(silent=True) or {}
+    user_id = str(body.get('userId', '')).strip()
+    password = str(body.get('password', ''))
+    if not user_id or len(user_id) > 40 or any(ch in user_id for ch in '/\\\n\r'):
+        return jsonify(error='invalid_user_id', message='用户 ID 无效。'), 400
+    if len(password) < PASSWORD_MIN_LENGTH or len(password) > 200:
+        return jsonify(error='invalid_password', message='密码至少需要 4 位。'), 400
+    conn = db()
+    row = conn.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
+    stamp = now_text()
+    created = False
+    if not row:
+        token = secrets.token_urlsafe(32)
+        conn.execute('INSERT INTO users(user_id, token_hash, password_hash, created_at, updated_at) VALUES(?,?,?,?,?)', (user_id, token_hash(token), password_hash(password), stamp, stamp))
+        conn.execute('INSERT INTO timetables(user_id, state_json, updated_at) VALUES(?,?,?)', (user_id, json.dumps({'settings': {}, 'courses': []}), stamp))
+        created = True
+        revision = 0
+    else:
+        stored = row['password_hash']
+        # 旧版由管理员创建的账号首次登录时设置密码，之后即按密码校验。
+        if stored and not password_matches(password, stored):
+            conn.close()
+            return jsonify(error='invalid_credentials', message='用户 ID 或密码不正确。'), 401
+        token = secrets.token_urlsafe(32)
+        conn.execute('UPDATE users SET token_hash=?, password_hash=?, updated_at=? WHERE user_id=?', (token_hash(token), stored or password_hash(password), stamp, row['user_id']))
+        revision_row = conn.execute('SELECT revision FROM timetables WHERE user_id=?', (row['user_id'],)).fetchone()
+        revision = int(revision_row['revision']) if revision_row else 0
+    conn.commit()
+    conn.close()
+    return jsonify(userId=user_id, token=token, revision=revision, created=created)
 
 
 def auth_user():
