@@ -6,6 +6,7 @@ services:
       PORT: "8080"
       CLASS_TABLE_DB: /data/class-table.sqlite3
       CLASS_TABLE_CORS_ORIGIN: https://class.vincentlee.asia
+      CLASS_TABLE_PUBLIC_BASE: https://api.vincentlee.asia/class-table
       CLASS_TABLE_BOOTSTRAP_KEY: ${CLASS_TABLE_BOOTSTRAP_KEY}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}

@@ -162,6 +162,7 @@
           <button type="button" class="settings-nav-item" data-settings-section="schedule"><span>课节与作息</span><small>节数、时长、课间</small></button>
           <button type="button" class="settings-nav-item" data-settings-section="navigation"><span>导航与宿舍</span><small>地图与回宿舍</small></button>
           <button type="button" class="settings-nav-item" data-settings-section="sync"><span>服务器同步</span><small>账号与推送</small></button>
+          <button type="button" class="settings-nav-item" data-settings-section="calendar"><span>日历与提醒</span><small>订阅 Apple 日历</small></button>
           <button type="button" class="settings-nav-item" data-settings-section="shortcut"><span>闹钟快捷指令</span><small>安装与更新</small></button>
           <button type="button" class="settings-nav-item" data-settings-section="data"><span>备份与数据</span><small>导入、导出、清空</small></button>
         </nav>
@@ -187,6 +188,7 @@
             <label>宿舍位置<input id="dormLocation" type="text" maxlength="80" placeholder="例如：南昌工学院学生公寓 9号楼"></label>
           </section>
       <section class="settings-panel" data-settings-panel="sync"><h3>服务器同步</h3><p class="settings-description">登录后可在多台设备间保存和同步课表。</p><div class="sync-zone"><label>用户 ID<input id="userId" type="text" maxlength="40" placeholder="例如：Admin"></label><label>密码<input id="syncPassword" type="password" autocomplete="new-password" minlength="4" placeholder="自己设置的密码"></label><div class="sync-actions"><button type="button" class="secondary-btn" id="loginBtn">登录 / 注册</button><button type="button" class="secondary-btn" id="syncLogoutBtn">退出服务器账号</button><button type="button" class="secondary-btn" id="syncPullBtn">从服务器拉取</button><button type="button" class="secondary-btn" id="syncPushBtn">上传到服务器</button></div><label>服务器地址<input id="syncEndpoint" type="url" maxlength="160" placeholder="https://api.vincentlee.asia/class-table"></label><div class="sync-actions"><button type="button" class="secondary-btn" id="pushEnableBtn">启用课前推送</button><button type="button" class="secondary-btn" id="pushDisableBtn">关闭课前推送</button></div><small id="syncStatus">未启用服务器同步；本机仍可离线使用。</small><small id="pushStatus">课前推送需要将本应用添加到 iPhone/iPad 主屏幕，并允许通知。</small></div></section>
+      <section class="settings-panel" data-settings-panel="calendar"><h3>日历与提醒</h3><p class="settings-description">将服务器课表订阅到 Apple 日历，课程修改后会随系统刷新更新。</p><div class="sync-zone calendar-subscription-zone"><p id="calendarSubscriptionStatus">请先登录服务器账号。</p><div class="sync-actions"><button type="button" class="secondary-btn" id="calendarSubscribeBtn">开通日历订阅</button><button type="button" class="secondary-btn" id="calendarCopyBtn" hidden>复制订阅地址</button><button type="button" class="secondary-btn" id="calendarRotateBtn" hidden>重新生成地址</button><button type="button" class="danger-btn" id="calendarDisableBtn" hidden>关闭订阅</button></div><small id="calendarSubscriptionHelp">首次开通后，请在 Apple 日历中选择“添加订阅日历”，粘贴订阅地址并确认。订阅日历为只读。</small></div></section>
       <section class="settings-panel" data-settings-panel="shortcut"><h3>闹钟快捷指令</h3><p class="settings-description">首次建立系统闹钟前，请安装快捷指令“V课表创建闹钟”。</p><div class="sync-zone"><div class="sync-actions"><button type="button" class="secondary-btn" id="shortcutOpenInstallBtn">安装 / 更新快捷指令</button><button type="button" class="secondary-btn" id="shortcutMarkBtn">我已安装</button></div><small id="shortcutStatus">尚未标记为已安装。</small></div></section>
           <section class="settings-panel" data-settings-panel="data"><h3>备份与数据</h3><p class="settings-description">导出数据可用于更换设备或恢复课表。</p>
             <div class="backup-zone"><p>备份与恢复</p><div><button type="button" class="secondary-btn" id="exportBtn">导出课表数据</button><button type="button" class="secondary-btn" id="importBtn">导入课表数据</button><input id="importFile" type="file" accept="application/json,.json" hidden></div><small>导入会覆盖当前本机课表，建议先导出备份。</small></div>
@@ -218,6 +220,5 @@
   </script>
 </body>
 </html>
-
 
 

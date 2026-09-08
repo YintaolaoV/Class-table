@@ -23,6 +23,7 @@ APP = Flask(__name__)
 ORIGIN = os.getenv('CLASS_TABLE_CORS_ORIGIN', 'https://class.vincentlee.asia')
 CORS(APP, resources={r'/v1/*': {'origins': [ORIGIN]}})
 DB_PATH = os.getenv('CLASS_TABLE_DB', '/data/class-table.sqlite3')
+PUBLIC_API_BASE = os.getenv('CLASS_TABLE_PUBLIC_BASE', 'https://api.vincentlee.asia/class-table').rstrip('/')
 BOOTSTRAP_KEY = os.getenv('CLASS_TABLE_BOOTSTRAP_KEY', '')
 VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
@@ -99,6 +100,15 @@ def db():
         message TEXT NOT NULL DEFAULT '',
         status_code INTEGER,
         created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS calendar_subscriptions (
+        user_id TEXT PRIMARY KEY COLLATE NOCASE,
+        token_hash TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_access_at TEXT,
+        FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
       );
     ''')
     # 兼容旧版已创建的 users 表
@@ -211,6 +221,108 @@ def require_admin():
     return user_id, None
 
 
+def ics_escape(value):
+    return str(value or '').replace('\\', '\\\\').replace('\r', '').replace('\n', '\\n').replace(';', '\\;').replace(',', '\\,')
+
+
+def ics_fold(line):
+    """Fold an iCalendar line without splitting a UTF-8 character."""
+    text = str(line)
+    chunks, current, size = [], '', 0
+    for char in text:
+        char_size = len(char.encode('utf-8'))
+        if current and size + char_size > 70:
+            chunks.append(current)
+            current, size = ' ', 1
+        current += char
+        size += char_size
+    chunks.append(current)
+    return '\r\n'.join(chunks)
+
+
+def ics_datetime(date_value, minute):
+    hour, minute_value = divmod(max(0, int(minute)), 60)
+    local = datetime(date_value.year, date_value.month, date_value.day, hour, minute_value, tzinfo=TZ)
+    return local.strftime('%Y%m%dT%H%M%S')
+
+
+def calendar_events(user_id, state):
+    settings = state.get('settings') if isinstance(state, dict) else {}
+    courses = state.get('courses') if isinstance(state, dict) else []
+    if not isinstance(settings, dict) or not isinstance(courses, list):
+        return []
+    try:
+        term_start = datetime.strptime(str(settings.get('termStart', '')), '%Y-%m-%d').date()
+    except ValueError:
+        return []
+    events = []
+    for index, course in enumerate(courses):
+        if not isinstance(course, dict):
+            continue
+        try:
+            day = int(course.get('day', 0))
+            week_start = max(1, int(course.get('weekStart', 1)))
+            week_end = min(52, int(course.get('weekEnd', 16)))
+            start_period = int(course.get('start', 1))
+            duration = max(1, int(course.get('duration', 1)))
+        except (TypeError, ValueError):
+            continue
+        if not 1 <= day <= 7 or week_start > week_end or start_period < 1:
+            continue
+        week_type = str(course.get('weekType', 'all'))
+        if week_type not in ('all', 'odd', 'even'):
+            week_type = 'all'
+        try:
+            start_minute, end_minute = course_timing(course, settings)
+        except (TypeError, ValueError, KeyError):
+            continue
+        course_id = str(course.get('id') or f'course-{index}')
+        name = str(course.get('name') or '未命名课程').strip()[:80]
+        location = str(course.get('location') or '').strip()[:120]
+        for week in range(week_start, week_end + 1):
+            if week_type != 'all' and week_type != ('odd' if week % 2 else 'even'):
+                continue
+            class_date = term_start + timedelta(days=(week - 1) * 7 + day - 1)
+            event_key = hashlib.sha256(f'{user_id}:{course_id}:{class_date.isoformat()}'.encode('utf-8')).hexdigest()[:24]
+            events.append({
+                'uid': f'{event_key}@vincentlee.asia',
+                'date': class_date,
+                'start': start_minute,
+                'end': end_minute,
+                'name': name,
+                'location': location,
+                'description': f'第{week}周 · 星期{("一", "二", "三", "四", "五", "六", "日")[day - 1]} · 第{start_period}-{start_period + duration - 1}节'
+            })
+    return sorted(events, key=lambda item: (item['date'], item['start'], item['uid']))
+
+
+def render_calendar(user_id, state, revision=0):
+    stamp = datetime.now(TZ).strftime('%Y%m%dT%H%M%S')
+    lines = [
+        'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//V课表//课程订阅//CN',
+        'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:V课表',
+        'X-WR-TIMEZONE:Asia/Shanghai',
+        'BEGIN:VTIMEZONE', 'TZID:Asia/Shanghai', 'X-LIC-LOCATION:Asia/Shanghai',
+        'BEGIN:STANDARD', 'TZOFFSETFROM:+0800', 'TZOFFSETTO:+0800',
+        'TZNAME:CST', 'DTSTART:19700101T000000', 'END:STANDARD',
+        'END:VTIMEZONE'
+    ]
+    for event in calendar_events(user_id, state):
+        lines.extend([
+            'BEGIN:VEVENT', f"UID:{event['uid']}", f'DTSTAMP:{stamp}',
+            f"DTSTART;TZID=Asia/Shanghai:{ics_datetime(event['date'], event['start'])}",
+            f"DTEND;TZID=Asia/Shanghai:{ics_datetime(event['date'], event['end'])}",
+            f"SUMMARY:{ics_escape(event['name'])}",
+            f"LOCATION:{ics_escape(event['location'])}",
+            f"DESCRIPTION:{ics_escape(event['description'])}",
+            f'SEQUENCE:{int(revision or 0)}',
+            'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:-PT20M',
+            f"DESCRIPTION:{ics_escape(event['name'])} 即将开始", 'END:VALARM', 'END:VEVENT'
+        ])
+    lines.extend(['END:VCALENDAR', ''])
+    return '\r\n'.join(ics_fold(line) for line in lines)
+
+
 @APP.get('/health')
 def health():
     return jsonify(ok=True, push=bool(webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY))
@@ -260,7 +372,7 @@ def admin_overview():
     filter_user = str(request.args.get('userId', '')).strip()[:40]
     conn = db()
     users = []
-    user_query = 'SELECT u.user_id,u.created_at,u.updated_at,t.revision,t.updated_at AS timetable_updated,t.state_json FROM users u LEFT JOIN timetables t ON t.user_id=u.user_id'
+    user_query = 'SELECT u.user_id,u.created_at,u.updated_at,t.revision,t.updated_at AS timetable_updated,t.state_json,c.enabled AS calendar_enabled,c.last_access_at AS calendar_last_access FROM users u LEFT JOIN timetables t ON t.user_id=u.user_id LEFT JOIN calendar_subscriptions c ON c.user_id=u.user_id'
     user_params = ()
     if filter_user:
         user_query += ' WHERE u.user_id LIKE ?'
@@ -271,7 +383,7 @@ def admin_overview():
             state = json.loads(row['state_json'] or '{}')
         except Exception:
             state = {'settings': {}, 'courses': []}
-        users.append({'userId': row['user_id'], 'createdAt': row['created_at'], 'updatedAt': row['updated_at'], 'revision': row['revision'] or 0, 'timetableUpdatedAt': row['timetable_updated'], 'state': state})
+        users.append({'userId': row['user_id'], 'createdAt': row['created_at'], 'updatedAt': row['updated_at'], 'revision': row['revision'] or 0, 'timetableUpdatedAt': row['timetable_updated'], 'calendarEnabled': bool(row['calendar_enabled']), 'calendarLastAccessAt': row['calendar_last_access'], 'state': state})
     log_query = 'SELECT user_id,level,event_type,message,status_code,created_at FROM audit_logs'
     log_params = ()
     if filter_user:
@@ -358,6 +470,106 @@ def put_timetable():
     conn.close()
     audit(user_id, 'timetable_push', f'上传课表，版本 {revision}')
     return jsonify(ok=True, revision=revision, updatedAt=stamp)
+
+
+def calendar_url(token):
+    return f'{PUBLIC_API_BASE}/v1/calendar/feed/{token}.ics'
+
+
+def calendar_subscription_row(user_id):
+    conn = db()
+    row = conn.execute('SELECT * FROM calendar_subscriptions WHERE user_id=?', (user_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def create_calendar_subscription(user_id, rotate=False):
+    token = secrets.token_urlsafe(36)
+    stamp = now_text()
+    conn = db()
+    existing = conn.execute('SELECT created_at,enabled FROM calendar_subscriptions WHERE user_id=?', (user_id,)).fetchone()
+    if existing and not rotate and existing['enabled']:
+        conn.close()
+        return None, existing['created_at']
+    if existing:
+        conn.execute('UPDATE calendar_subscriptions SET token_hash=?, enabled=1, updated_at=? WHERE user_id=?', (token_hash(token), stamp, user_id))
+        event_type, message = 'calendar_subscription_rotated', '重新生成日历订阅地址'
+    else:
+        conn.execute('INSERT INTO calendar_subscriptions(user_id,token_hash,enabled,created_at,updated_at) VALUES(?,?,?,?,?)', (user_id, token_hash(token), 1, stamp, stamp))
+        event_type, message = 'calendar_subscription_created', '开通日历订阅'
+    conn.commit()
+    conn.close()
+    audit(user_id, event_type, message)
+    return token, stamp
+
+
+@APP.get('/v1/calendar/subscription')
+def get_calendar_subscription():
+    user_id, error = require_user()
+    if error:
+        return error
+    row = calendar_subscription_row(user_id)
+    if not row:
+        return jsonify(enabled=False, hasSubscription=False)
+    return jsonify(enabled=bool(row['enabled']), hasSubscription=True, createdAt=row['created_at'], updatedAt=row['updated_at'], lastAccessAt=row['last_access_at'])
+
+
+@APP.post('/v1/calendar/subscription')
+def enable_calendar_subscription():
+    user_id, error = require_user()
+    if error:
+        return error
+    token, created_at = create_calendar_subscription(user_id, rotate=False)
+    if not token:
+        return jsonify(enabled=True, hasSubscription=True, createdAt=created_at, message='日历订阅已开通；如需新地址请使用重新生成。')
+    return jsonify(enabled=True, hasSubscription=True, createdAt=created_at, subscriptionUrl=calendar_url(token))
+
+
+@APP.post('/v1/calendar/subscription/rotate')
+def rotate_calendar_subscription():
+    user_id, error = require_user()
+    if error:
+        return error
+    token, created_at = create_calendar_subscription(user_id, rotate=True)
+    return jsonify(enabled=True, hasSubscription=True, createdAt=created_at, subscriptionUrl=calendar_url(token))
+
+
+@APP.delete('/v1/calendar/subscription')
+def disable_calendar_subscription():
+    user_id, error = require_user()
+    if error:
+        return error
+    conn = db()
+    conn.execute('UPDATE calendar_subscriptions SET enabled=0, updated_at=? WHERE user_id=?', (now_text(), user_id))
+    conn.commit()
+    conn.close()
+    audit(user_id, 'calendar_subscription_disabled', '停用日历订阅')
+    return jsonify(ok=True, enabled=False)
+
+
+@APP.get('/v1/calendar/feed/<token>.ics')
+def calendar_feed(token):
+    token = str(token or '').strip()
+    if len(token) < 32 or len(token) > 160:
+        return 'Not Found', 404
+    conn = db()
+    row = conn.execute('SELECT s.user_id,s.enabled,t.state_json,t.revision FROM calendar_subscriptions s JOIN timetables t ON t.user_id=s.user_id WHERE s.token_hash=?', (token_hash(token),)).fetchone()
+    if not row or not row['enabled']:
+        conn.close()
+        return 'Not Found', 404
+    try:
+        state = json.loads(row['state_json'] or '{}')
+    except Exception:
+        state = {'settings': {}, 'courses': []}
+    conn.execute('UPDATE calendar_subscriptions SET last_access_at=? WHERE user_id=?', (now_text(), row['user_id']))
+    conn.commit()
+    conn.close()
+    body = render_calendar(row['user_id'], state, row['revision'])
+    response = APP.response_class(body, mimetype='text/calendar')
+    response.headers['Content-Type'] = 'text/calendar; charset=utf-8'
+    response.headers['Content-Disposition'] = 'inline; filename="V-Class-Table.ics"'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
 
 
 @APP.post('/v1/push/subscription')
