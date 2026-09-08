@@ -159,23 +159,44 @@
   <dialog id="settingsDialog" class="modal glass">
     <form id="settingsForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">个性化</p><h2>课表设置</h2></div><button type="button" class="icon-btn close" data-close="settingsDialog">×</button></div>
-      <label>课表名称<input id="scheduleName" type="text" maxlength="24" required placeholder="例如：大三下"></label>
-      <label>教学周开始日期<input id="termStart" type="date" required></label>
-      <p class="field-help">开始日所在的自然周将作为第 1 教学周。</p>
-      <div class="form-grid"><label>每天课节数<select id="periodCount"></select></label><label>每节时长（分钟）<input id="periodMinutes" type="number" min="15" max="240" step="5" required></label></div>
-      <label class="setting-check"><input id="usePresetTimes" type="checkbox">使用学校作息时间（默认，含午休与晚饭）</label>
-      <label>全局课间时长（分钟）<input id="breakMinutes" type="number" min="0" max="120" step="5" required></label>
-      <div class="form-grid"><label>第 2–3 节课间（分钟）<input id="breakAfter2" type="number" min="0" max="120" step="5" required></label><label>第 6–7 节课间（分钟）<input id="breakAfter6" type="number" min="0" max="120" step="5" required></label></div>
-      <div class="form-grid"><label>午休开始（第 4–5 节间）<input id="lunchStart" type="time" required></label><label>午休结束<input id="lunchEnd" type="time" required></label></div>
-      <div class="form-grid"><label>晚饭开始（第 8–9 节间）<input id="dinnerStart" type="time" required></label><label>晚饭结束<input id="dinnerEnd" type="time" required></label></div>
-      <label>第一节开始时间<input id="firstTime" type="time" required></label>
-      <label>Apple 地图搜索前缀<input id="mapSearchPrefix" type="text" maxlength="60" placeholder="例如：南昌工学院"></label>
-      <p class="field-help">导航时会在 Apple 地图中搜索“前缀 楼名”，例如“南昌工学院 明志楼”。</p>
-      <label>宿舍位置<input id="dormLocation" type="text" maxlength="80" placeholder="例如：南昌工学院学生公寓 9号楼"></label>
-      <div class="sync-zone"><p>服务器同步</p><label>用户 ID<input id="userId" type="text" maxlength="40" placeholder="例如：Admin"></label><label>密码<input id="syncPassword" type="password" autocomplete="new-password" minlength="4" placeholder="自己设置的密码"></label><div class="sync-actions"><button type="button" class="secondary-btn" id="loginBtn">登录 / 注册</button><button type="button" class="secondary-btn" id="syncLogoutBtn">退出服务器账号</button><button type="button" class="secondary-btn" id="syncPullBtn">从服务器拉取</button><button type="button" class="secondary-btn" id="syncPushBtn">上传到服务器</button></div><label>服务器地址<input id="syncEndpoint" type="url" maxlength="160" placeholder="https://api.vincentlee.asia/class-table"></label><div class="sync-actions"><button type="button" class="secondary-btn" id="pushEnableBtn">启用课前推送</button><button type="button" class="secondary-btn" id="pushDisableBtn">关闭课前推送</button></div><small id="syncStatus">未启用服务器同步；本机仍可离线使用。</small><small id="pushStatus">课前推送需要将本应用添加到 iPhone/iPad 主屏幕，并允许通知。</small></div>
-      <div class="sync-zone"><p>闹钟快捷指令</p><div class="sync-actions"><button type="button" class="secondary-btn" id="shortcutOpenInstallBtn">安装 / 更新快捷指令</button><button type="button" class="secondary-btn" id="shortcutMarkBtn">我已安装</button></div><small id="shortcutStatus">首次使用“打开闹钟”前，请安装名为“V课表创建闹钟”的快捷指令。</small></div>
-      <div class="backup-zone"><p>备份与恢复</p><div><button type="button" class="secondary-btn" id="exportBtn">导出课表数据</button><button type="button" class="secondary-btn" id="importBtn">导入课表数据</button><input id="importFile" type="file" accept="application/json,.json" hidden></div><small>导入会覆盖当前本机课表，建议先导出备份。</small></div>
-      <div class="danger-zone"><p>管理本地数据</p><div><button type="button" class="danger-btn" id="resetBtn">恢复示例课表</button><button type="button" class="danger-btn" id="clearBtn">清空课表</button></div></div>
+      <div class="settings-layout">
+        <nav class="settings-nav" aria-label="设置分类">
+          <button type="button" class="settings-nav-item is-active" data-settings-section="basic"><span>基本信息</span><small>名称与教学周</small></button>
+          <button type="button" class="settings-nav-item" data-settings-section="schedule"><span>课节与作息</span><small>节数、时长、课间</small></button>
+          <button type="button" class="settings-nav-item" data-settings-section="navigation"><span>导航与宿舍</span><small>地图与回宿舍</small></button>
+          <button type="button" class="settings-nav-item" data-settings-section="sync"><span>服务器同步</span><small>账号与推送</small></button>
+          <button type="button" class="settings-nav-item" data-settings-section="shortcut"><span>闹钟快捷指令</span><small>安装与更新</small></button>
+          <button type="button" class="settings-nav-item" data-settings-section="data"><span>备份与数据</span><small>导入、导出、清空</small></button>
+        </nav>
+        <div class="settings-panels">
+          <button type="button" class="settings-mobile-back" id="settingsBackBtn">‹ 返回设置分类</button>
+          <section class="settings-panel is-active" data-settings-panel="basic"><h3>基本信息</h3><p class="settings-description">定义课表名称和本学期教学周起点。</p>
+            <label>课表名称<input id="scheduleName" type="text" maxlength="24" required placeholder="例如：大三下"></label>
+            <label>教学周开始日期<input id="termStart" type="date" required></label>
+            <p class="field-help">开始日所在的自然周将作为第 1 教学周。</p>
+          </section>
+          <section class="settings-panel" data-settings-panel="schedule"><h3>课节与作息</h3><p class="settings-description">自定义课节数量、时长和课间安排。</p>
+            <div class="form-grid"><label>每天课节数<select id="periodCount"></select></label><label>每节时长（分钟）<input id="periodMinutes" type="number" min="15" max="240" step="5" required></label></div>
+            <label class="setting-check"><input id="usePresetTimes" type="checkbox">使用学校作息时间（默认，含午休与晚饭）</label>
+            <label>全局课间时长（分钟）<input id="breakMinutes" type="number" min="0" max="120" step="5" required></label>
+            <div class="form-grid"><label>第 2–3 节课间（分钟）<input id="breakAfter2" type="number" min="0" max="120" step="5" required></label><label>第 6–7 节课间（分钟）<input id="breakAfter6" type="number" min="0" max="120" step="5" required></label></div>
+            <div class="form-grid"><label>午休开始（第 4–5 节间）<input id="lunchStart" type="time" required></label><label>午休结束<input id="lunchEnd" type="time" required></label></div>
+            <div class="form-grid"><label>晚饭开始（第 8–9 节间）<input id="dinnerStart" type="time" required></label><label>晚饭结束<input id="dinnerEnd" type="time" required></label></div>
+            <label>第一节开始时间<input id="firstTime" type="time" required></label>
+          </section>
+          <section class="settings-panel" data-settings-panel="navigation"><h3>导航与宿舍</h3><p class="settings-description">设置 Apple 地图搜索前缀和行程卡片中的宿舍位置。</p>
+            <label>Apple 地图搜索前缀<input id="mapSearchPrefix" type="text" maxlength="60" placeholder="例如：南昌工学院"></label>
+            <p class="field-help">导航时会在 Apple 地图中搜索“前缀 楼名”，例如“南昌工学院 明志楼”。</p>
+            <label>宿舍位置<input id="dormLocation" type="text" maxlength="80" placeholder="例如：南昌工学院学生公寓 9号楼"></label>
+          </section>
+      <section class="settings-panel" data-settings-panel="sync"><h3>服务器同步</h3><p class="settings-description">登录后可在多台设备间保存和同步课表。</p><div class="sync-zone"><label>用户 ID<input id="userId" type="text" maxlength="40" placeholder="例如：Admin"></label><label>密码<input id="syncPassword" type="password" autocomplete="new-password" minlength="4" placeholder="自己设置的密码"></label><div class="sync-actions"><button type="button" class="secondary-btn" id="loginBtn">登录 / 注册</button><button type="button" class="secondary-btn" id="syncLogoutBtn">退出服务器账号</button><button type="button" class="secondary-btn" id="syncPullBtn">从服务器拉取</button><button type="button" class="secondary-btn" id="syncPushBtn">上传到服务器</button></div><label>服务器地址<input id="syncEndpoint" type="url" maxlength="160" placeholder="https://api.vincentlee.asia/class-table"></label><div class="sync-actions"><button type="button" class="secondary-btn" id="pushEnableBtn">启用课前推送</button><button type="button" class="secondary-btn" id="pushDisableBtn">关闭课前推送</button></div><small id="syncStatus">未启用服务器同步；本机仍可离线使用。</small><small id="pushStatus">课前推送需要将本应用添加到 iPhone/iPad 主屏幕，并允许通知。</small></div></section>
+      <section class="settings-panel" data-settings-panel="shortcut"><h3>闹钟快捷指令</h3><p class="settings-description">首次建立系统闹钟前，请安装快捷指令“V课表创建闹钟”。</p><div class="sync-zone"><div class="sync-actions"><button type="button" class="secondary-btn" id="shortcutOpenInstallBtn">安装 / 更新快捷指令</button><button type="button" class="secondary-btn" id="shortcutMarkBtn">我已安装</button></div><small id="shortcutStatus">尚未标记为已安装。</small></div></section>
+          <section class="settings-panel" data-settings-panel="data"><h3>备份与数据</h3><p class="settings-description">导出数据可用于更换设备或恢复课表。</p>
+            <div class="backup-zone"><p>备份与恢复</p><div><button type="button" class="secondary-btn" id="exportBtn">导出课表数据</button><button type="button" class="secondary-btn" id="importBtn">导入课表数据</button><input id="importFile" type="file" accept="application/json,.json" hidden></div><small>导入会覆盖当前本机课表，建议先导出备份。</small></div>
+            <div class="danger-zone"><p>管理本地数据</p><div><button type="button" class="danger-btn" id="resetBtn">恢复示例课表</button><button type="button" class="danger-btn" id="clearBtn">清空课表</button></div></div>
+          </section>
+        </div>
+      </div>
       <div class="modal-actions"><button type="button" class="secondary-btn" data-close="settingsDialog">取消</button><button type="submit" class="primary-btn">保存设置</button></div>
     </form>
   </dialog>
@@ -216,3 +237,7 @@
   </script>
 </body>
 </html>
+
+
+
+
