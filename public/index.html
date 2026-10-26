@@ -11,7 +11,8 @@
   <title>V课表公测版</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261026-mobile1">
+  <script>(()=>{const ua=navigator.userAgent||'',hint=navigator.userAgentData?.platform||navigator.platform||'',ios=/iPad|iPhone|iPod/i.test(ua)||(/Mac/i.test(hint)&&navigator.maxTouchPoints>1),android=/Android/i.test(ua),edge=/EdgiOS|EdgA|Edg\//i.test(ua),safari=/Safari/i.test(ua)&&!/Chrome|CriOS|FxiOS|EdgiOS|EdgA|Edg\//i.test(ua),browser=edge?'edge':safari?'safari':/Firefox|FxiOS/i.test(ua)?'firefox':/Chrome|CriOS|Chromium/i.test(ua)?'chrome':'other',nativeApp=Boolean(window.VincentNative)||/VincentTools\//i.test(ua),standalone=navigator.standalone===true||matchMedia('(display-mode: standalone)').matches,platform=ios?'ios':android?'android':/Windows/i.test(hint+ua)?'windows':/Mac/i.test(hint)?'macos':'other',root=document.documentElement,compact=matchMedia('(max-width:760px)');root.dataset.platform=platform;root.dataset.browser=browser;root.dataset.container=nativeApp?'android-app':standalone?(ios?'ios-webapp':'pwa'):'browser';root.dataset.input=matchMedia('(pointer:coarse)').matches?'touch':'pointer';const update=()=>root.dataset.layout=compact.matches?'compact':'wide';update();compact.addEventListener?.('change',update);window.VincentDevice=Object.freeze({platform,browser,container:root.dataset.container,input:root.dataset.input,isIOS:ios,isAndroid:android,isNativeApp:nativeApp})})();</script>
   <style>
     .public-import-zone { margin-top: 18px; padding: 14px; border-radius: 16px; background: rgba(78, 108, 255, .08); }
     .public-import-zone p { margin: 0 0 8px; color: var(--blue); font-weight: 700; }

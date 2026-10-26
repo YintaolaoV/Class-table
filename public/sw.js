@@ -1,4 +1,4 @@
-const CACHE_NAME = 'static-timetable-public-shell-v1.0.1';
+const CACHE_NAME = 'static-timetable-public-shell-v1.0.2';
 const APP_SHELL = [
   './', './index.html', './styles.css', './app.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './import-prompt.md', './adapters/registry.json', './adapters/zhengfang-v9.js'
@@ -9,7 +9,7 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('static-timetable-shell-') && key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('static-timetable-public-shell-') && key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', event => {
